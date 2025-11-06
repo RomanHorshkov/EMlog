@@ -45,21 +45,46 @@ static struct {
 
 /**
  * @brief Convert a log level to a short string.
+ * 
+ * Maps EML_LEVEL_DBG -> "DBG", EML_LEVEL_INFO -> "INF", etc.
+ * 
  * @param l Log level
  * @return const char* Short level name ("DBG","INF","WRN","ERR","CRT").
  */
 static const char* lvl_str(eml_level_t l);
 
-/** @brief Choose default FILE stream for a level (stdout/stderr). */
+/** @brief Choose default FILE stream for a level (stdout/stderr).
+ * 
+ * Logs at DBG/INF go to stdout, others to stderr.
+ * 
+ * @param l Log level
+ * @return FILE* stdout for DBG/INF, stderr for WRN/ERR/CRT
+ */
 static FILE* default_stream(eml_level_t l);
 
-/** @brief Format current time as ISO8601 into buffer. */
-static void fmt_time_iso8601(char* out, size_t n, long* msec_out);
+/** @brief Format current time as ISO8601 into buffer.
+ * 
+ * Produces a string like "2025-08-15T14:23:30.123Z".
+ * 
+ * @param out Output buffer
+ * @param n Size of output buffer
+ * @param msec_out Optional pointer to receive milliseconds part
+ */
+static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out);
 
-/** @brief Parse textual level name (from env) into eml_level_t. */
+/** @brief Parse textual level name (from env) into eml_level_t.
+ * 
+ * Handles "debug", "info", "warn", "error", "crit" (case-insensitive).
+ * 
+ *  @param s Level name string
+ *  @return eml_level_t Parsed level, or EML_LEVEL_INFO on unrecognized/NULL
+ */
 static eml_level_t parse_level(const char* s);
 
 /** @brief Low-level writer that emits a single line (no trailing \n expected).
+ * 
+ * Writes the line using the custom writer if set, else to stdout/stderr
+ * 
  * @param level Log level
  * @param line Pointer to line data (not NUL-terminated necessarily)
  * @param n Length of line
@@ -67,9 +92,13 @@ static eml_level_t parse_level(const char* s);
 static void write_line(eml_level_t level, const char* line, size_t n);
 
 /** @brief Core varargs logger implementation (expects mutex to be held).
- *
- * Formats the message and emits it via write_line(). This function is the
- * central formatting path used by emlog_log() and emlog_log_errno().
+ * 
+ * Formats and emits a log line if the level is >= current min_level.
+ * 
+ * @param level Log level
+ * @param comp Component name (nullable)
+ * @param fmt Printf-style format string
+ * @param ap   va_list of arguments
  */
 static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap);
 
@@ -321,35 +350,35 @@ uint64_t eml_tid(void)
 #endif
 }
 
-static void fmt_time_iso8601(char* out, size_t n, long* msec_out)
+static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
 {
-    /* Provide a larger temporary buffer for composing the time string so
-     * snprintf's static analyzer can safely reason about maximum output
-     * length. We then copy at most n-1 bytes to the caller's buffer.
-     */
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    struct tm tm;
-    localtime_r(&ts.tv_sec, &tm);
-    char tzbuf[16]; /* safer size for timezone like +hhmm or +hh:mm */
-    strftime(tzbuf, sizeof tzbuf, "%z", &tm);
-    long ms = ts.tv_nsec / 1000000;
+    struct timespec ts;  clock_gettime(CLOCK_REALTIME, &ts);
+    struct tm tm;        localtime_r(&ts.tv_sec, &tm);
 
-    char tmp[128];
-    int written = snprintf(tmp, sizeof tmp, "%04d-%02d-%02dT%02d:%02d:%02d.%03ld%s",
-                           tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
-                           tm.tm_min, tm.tm_sec, ms, tzbuf);
-    if(written < 0) tmp[0] = '\0';
+    unsigned ms = (unsigned)((ts.tv_nsec / 1000000u) % 1000u);
 
-    /* Copy up to n-1 bytes into out and NUL-terminate */
-    if(n > 0)
-    {
+    char z[6] = "";
+    if(!strftime(z, sizeof z, "%z", &tm)) memcpy(z, "+0000", 5);
+    char tz[7]; /* +HH:MM */
+    (void)snprintf(tz, sizeof tz, "%c%c%c:%c%c", z[0], z[1], z[2], z[3], z[4]);
+
+    /* 29 bytes without NUL: YYYY-MM-DDTHH:MM:SS.mmm+HH:MM */
+    enum { ISO8601_LEN = 29, ISO8601_BUFSZ = ISO8601_LEN + 1 };
+
+    char tmp[ISO8601_BUFSZ];
+    int written = snprintf(tmp, sizeof tmp,
+                           "%04d-%02d-%02dT%02d:%02d:%02d.%03u%s",
+                           tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                           tm.tm_hour, tm.tm_min, tm.tm_sec, ms, tz);
+    if (written < 0) { if (n) out[0] = '\0'; return; }
+
+    if (n) {
         size_t tocpy = (size_t)written;
-        if(tocpy >= n) tocpy = n - 1;
+        if (tocpy >= n) tocpy = n - 1;
         memcpy(out, tmp, tocpy);
         out[tocpy] = '\0';
     }
-    if(msec_out) *msec_out = ms;
+    if (msec_out) *msec_out = ms;
 }
 
 static eml_level_t parse_level(const char* s)
@@ -383,7 +412,7 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
     char ts[40] = {0};
     if(G.use_ts)
     {
-        long dummy_ms;
+        unsigned dummy_ms;
         fmt_time_iso8601(ts, sizeof ts, &dummy_ms);
     }
 
