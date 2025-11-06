@@ -138,7 +138,11 @@ ifeq ($(CLANG_FORMAT),)
 endif
 	@test -f .clang-format || { echo ".clang-format missing at repo root"; exit 1; }
 	@echo "[format] formatting sources"
-	@find app src tests -type f \( -name "*.c" -o -name "*.h" \) -print0 \
+	@dirs="app src tests"; \
+	found=""; \
+	for d in $$dirs; do [ -d "$$d" ] && found="$$found $$d"; done; \
+	if [ -z "$$found" ]; then echo "[format] no source directories found"; exit 0; fi; \
+	find $$found -type f \( -name "*.c" -o -name "*.h" \) -print0 \
 	 | xargs -0 -r $(CLANG_FORMAT) -i -style=file
 
 format-check: ## Check formatting (no changes)
@@ -147,7 +151,11 @@ ifeq ($(CLANG_FORMAT),)
 endif
 	@test -f .clang-format || { echo ".clang-format missing at repo root"; exit 1; }
 	@echo "[format] checking formatting"
-	@find app src tests -type f \( -name "*.c" -o -name "*.h" \) -print0 \
+	@dirs="app src tests"; \
+	found=""; \
+	for d in $$dirs; do [ -d "$$d" ] && found="$$found $$d"; done; \
+	if [ -z "$$found" ]; then echo "[format] no source directories found"; exit 0; fi; \
+	find $$found -type f \( -name "*.c" -o -name "*.h" \) -print0 \
 	 | xargs -0 -r $(CLANG_FORMAT) --dry-run -Werror -style=file
 
 help: ## Show this help message (targets with descriptions)

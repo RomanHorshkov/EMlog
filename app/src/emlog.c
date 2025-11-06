@@ -5,38 +5,39 @@
  */
 
 #ifndef _GNU_SOURCE
-#define _GNU_SOURCE
+#    define _GNU_SOURCE
 #endif
 #include "emlog.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/uio.h>
-#include <limits.h>
 
 #if defined(__linux__)
 #    include <sys/syscall.h>
 #endif
 
 /* Global runtime state (protected by mutex) */
-static struct {
-    eml_level_t     min_level; /**< Minimum level to emit */
-    int             use_ts;    /**< Whether timestamps are enabled */
-    pthread_mutex_t mu;        /**< Mutex protecting the struct */
-    eml_writer_fn   writer;    /**< Optional custom writer */
-    void*           writer_ud; /**< User data passed to writer */
+static struct
+{
+    eml_level_t     min_level;    /**< Minimum level to emit */
+    int             use_ts;       /**< Whether timestamps are enabled */
+    pthread_mutex_t mu;           /**< Mutex protecting the struct */
+    eml_writer_fn   writer;       /**< Optional custom writer */
+    void*           writer_ud;    /**< User data passed to writer */
     int             writev_flush; /**< Whether to fflush before writev */
-} G = {.min_level = EML_LEVEL_INFO,
-       .use_ts    = 1,
-       .mu        = PTHREAD_MUTEX_INITIALIZER,
-       .writer    = NULL,
-       .writer_ud = NULL,
+} G = {.min_level    = EML_LEVEL_INFO,
+       .use_ts       = 1,
+       .mu           = PTHREAD_MUTEX_INITIALIZER,
+       .writer       = NULL,
+       .writer_ud    = NULL,
        /* default: fastest path, do NOT fflush before writev. The
         * caller controls this via emlog_set_writev_flush(). */
        .writev_flush = 0};
@@ -48,9 +49,9 @@ static struct {
  * stdout/stderr are pipes (e.g., captured by systemd/journald).
  */
 #if defined(PIPE_BUF)
-#  define LOG_MAX_WRITE ((size_t)PIPE_BUF)
+#    define LOG_MAX_WRITE ((size_t)PIPE_BUF)
 #else
-#  define LOG_MAX_WRITE ((size_t)4096)
+#    define LOG_MAX_WRITE ((size_t)4096)
 #endif
 
 /* ------------------------------------------------------------------
@@ -84,17 +85,16 @@ static struct {
  * mutex and contention when many threads log at high rate.
  */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
-#  define EML_THREAD_LOCAL _Thread_local
+#    define EML_THREAD_LOCAL _Thread_local
 #elif defined(__GNUC__) || defined(__clang__)
-#  define EML_THREAD_LOCAL __thread
+#    define EML_THREAD_LOCAL __thread
 #else
-#  define EML_THREAD_LOCAL /* fallback: single global cache (will be slow) */
+#    define EML_THREAD_LOCAL /* fallback: single global cache (will be slow) */
 #endif
 
-EML_THREAD_LOCAL static time_t ts_cache_sec_tls = 0;
-EML_THREAD_LOCAL static char ts_cache_prefix_tls[32] = "";
-EML_THREAD_LOCAL static char ts_cache_tz_tls[8] = "+00:00";
-
+EML_THREAD_LOCAL static time_t ts_cache_sec_tls        = 0;
+EML_THREAD_LOCAL static char   ts_cache_prefix_tls[32] = "";
+EML_THREAD_LOCAL static char   ts_cache_tz_tls[8]      = "+00:00";
 
 /* --------------------------------------------------------------------------
  * Static function declarations (private helpers)
@@ -192,7 +192,7 @@ void emlog_init(int min_level, bool timestamps)
      * reads and allocations when formatting timestamps (strftime with %z)
      * on every log call. tzset() is idempotent and cheap when already
      * initialized. */
-    if (G.use_ts) tzset();
+    if(G.use_ts) tzset();
     pthread_mutex_unlock(&G.mu);
 }
 
@@ -449,12 +449,14 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
      * locking or further calls. We append ms and tz to the cached
      * prefix residing in thread-local storage.
      */
-    if (sec == (__time_t)ts_cache_sec_tls) {
-        if (n) {
+    if(sec == (__time_t)ts_cache_sec_tls)
+    {
+        if(n)
+        {
             int w = snprintf(out, n, "%s.%03u%s", ts_cache_prefix_tls, ms, ts_cache_tz_tls);
-            if (w < 0 && n) out[0] = '\0';
+            if(w < 0 && n) out[0] = '\0';
         }
-        if (msec_out) *msec_out = ms;
+        if(msec_out) *msec_out = ms;
         return;
     }
 
@@ -462,7 +464,8 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
      * cache using thread-local storage. No global mutex needed since
      * each thread updates its own cache.
      */
-    if (sec != (__time_t)ts_cache_sec_tls) {
+    if(sec != (__time_t)ts_cache_sec_tls)
+    {
         struct tm tm;
         /* localtime_r is thread-safe and will populate tm for the
          * current timezone. This is where libc may need tz data but it
@@ -476,7 +479,8 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
          * truncation on snprintf. strftime writes a NUL-terminated
          * string on success; fall back to empty prefix on failure.
          */
-        if (!strftime(ts_cache_prefix_tls, sizeof ts_cache_prefix_tls, "%Y-%m-%dT%H:%M:%S", &tm)) {
+        if(!strftime(ts_cache_prefix_tls, sizeof ts_cache_prefix_tls, "%Y-%m-%dT%H:%M:%S", &tm))
+        {
             ts_cache_prefix_tls[0] = '\0';
         }
 
@@ -485,7 +489,8 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
          * and insert a colon. If strftime fails, fall back to "+00:00".
          */
         char z[8] = "";
-        if (strftime(z, sizeof z, "%z", &tm) && strlen(z) >= 5) {
+        if(strftime(z, sizeof z, "%z", &tm) && strlen(z) >= 5)
+        {
             /* z is e.g. +0200 or -0530; convert to +02:00 */
             ts_cache_tz_tls[0] = z[0];
             ts_cache_tz_tls[1] = z[1];
@@ -494,18 +499,21 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
             ts_cache_tz_tls[4] = z[3];
             ts_cache_tz_tls[5] = z[4];
             ts_cache_tz_tls[6] = '\0';
-        } else {
+        }
+        else
+        {
             memcpy(ts_cache_tz_tls, "+00:00", sizeof "+00:00");
         }
 
         ts_cache_sec_tls = sec; /* publish updated cache for this thread */
     }
     /* Compose final string using thread-local cache. */
-    if (n) {
+    if(n)
+    {
         int w = snprintf(out, n, "%s.%03u%s", ts_cache_prefix_tls, ms, ts_cache_tz_tls);
-        if (w < 0 && n) out[0] = '\0';
+        if(w < 0 && n) out[0] = '\0';
     }
-    if (msec_out) *msec_out = ms;
+    if(msec_out) *msec_out = ms;
 }
 
 static eml_level_t parse_level(const char* s)
@@ -599,13 +607,16 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
     {
         /* custom writer: needs a contiguous buffer; assemble quickly */
         size_t total = 0;
-        for(int i = 0; i < iovcnt; ++i) total += iov[i].iov_len;
+        for(int i = 0; i < iovcnt; ++i)
+            total += iov[i].iov_len;
 
         /* try stack allocate when small */
-        if (total <= 2048) {
-            char buf[2048];
+        if(total <= 2048)
+        {
+            char   buf[2048];
             size_t off = 0;
-            for(int i = 0; i < iovcnt; ++i) {
+            for(int i = 0; i < iovcnt; ++i)
+            {
                 memcpy(buf + off, iov[i].iov_base, iov[i].iov_len);
                 off += iov[i].iov_len;
             }
@@ -615,9 +626,10 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
 
         /* otherwise use heap */
         char* buf = malloc(total);
-        if (!buf) return; /* if malloc fails, drop the line */
+        if(!buf) return; /* if malloc fails, drop the line */
         size_t off = 0;
-        for(int i = 0; i < iovcnt; ++i) {
+        for(int i = 0; i < iovcnt; ++i)
+        {
             memcpy(buf + off, iov[i].iov_base, iov[i].iov_len);
             off += iov[i].iov_len;
         }
@@ -633,20 +645,21 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
      * allocations and syscalls for the common case.
      */
     FILE* out = default_stream(level);
-    int fd = fileno(out);
+    int   fd  = fileno(out);
     /* If configured, flush stdio buffers to avoid interleaving with other
      * code that may be using stdio on the same stream (safer but slower).
      */
-    if (G.writev_flush) fflush(out);
+    if(G.writev_flush) fflush(out);
     /* prepare newline iovec */
-    const char nl = '\n';
+    const char   nl = '\n';
     struct iovec local_iov[16];
-    int cnt = 0;
-    for(int i = 0; i < iovcnt && cnt < (int)(sizeof local_iov / sizeof local_iov[0]) - 1; ++i) {
+    int          cnt = 0;
+    for(int i = 0; i < iovcnt && cnt < (int)(sizeof local_iov / sizeof local_iov[0]) - 1; ++i)
+    {
         local_iov[cnt++] = iov[i];
     }
     local_iov[cnt].iov_base = (void*)&nl;
-    local_iov[cnt].iov_len = 1;
+    local_iov[cnt].iov_len  = 1;
     ++cnt;
 
     ssize_t r = writev(fd, local_iov, cnt);
@@ -654,7 +667,8 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
 #else
     /* Fallback: write each iovec with fwrite and append newline */
     FILE* out = default_stream(level);
-    for(int i = 0; i < iovcnt; ++i) fwrite(iov[i].iov_base, 1, iov[i].iov_len, out);
+    for(int i = 0; i < iovcnt; ++i)
+        fwrite(iov[i].iov_base, 1, iov[i].iov_len, out);
     fputc('\n', out);
     fflush(out);
 #endif
@@ -779,14 +793,15 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
      * will choose an efficient path (writev or writer callback).
      */
     struct iovec iov[3];
-    int iovcnt = 0;
+    int          iovcnt  = 0;
     iov[iovcnt].iov_base = head;
-    iov[iovcnt].iov_len = (size_t)hlen;
+    iov[iovcnt].iov_len  = (size_t)hlen;
     ++iovcnt;
 
-    if (msglen > 0) {
+    if(msglen > 0)
+    {
         iov[iovcnt].iov_base = msg;
-        iov[iovcnt].iov_len = msglen;
+        iov[iovcnt].iov_len  = msglen;
         ++iovcnt;
     }
 
@@ -797,33 +812,44 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
      * We prefer dropping tail content over calling fflush.
      */
     size_t total = 0;
-    for (int i = 0; i < iovcnt; ++i) total += iov[i].iov_len;
-    if (total + 1 /* newline */ > LOG_MAX_WRITE && msglen > 0) {
+    for(int i = 0; i < iovcnt; ++i)
+        total += iov[i].iov_len;
+    if(total + 1 /* newline */ > LOG_MAX_WRITE && msglen > 0)
+    {
         /* compute max msglen that fits */
         size_t allowed = LOG_MAX_WRITE - 1; /* reserve for NL */
-        if ((size_t)hlen >= allowed) {
+        if((size_t)hlen >= allowed)
+        {
             /* header alone exceeds allowed size: truncate header (unlikely)
              * and emit a tiny fallback message.
              */
             iov[0].iov_len = allowed - 3; /* leave space for "..." */
-            iovcnt = 1;
-        } else {
+            iovcnt         = 1;
+        }
+        else
+        {
             size_t remain = allowed - (size_t)hlen;
-            if (remain < 4) {
+            if(remain < 4)
+            {
                 /* not enough room for useful payload; drop payload */
                 iovcnt = 1;
-            } else {
+            }
+            else
+            {
                 /* truncate message to remain-3 and append "..." */
                 size_t new_msglen = remain - 3;
                 /* modify stack or heap message buffer in-place if possible */
-                if (msglen > 0) {
-                    if (msglen > new_msglen) {
+                if(msglen > 0)
+                {
+                    if(msglen > new_msglen)
+                    {
                         /* ensure we can write '...' into the buffer */
-                        if ((size_t)msglen >= new_msglen + 3) {
+                        if((size_t)msglen >= new_msglen + 3)
+                        {
                             /* write '...' at truncation point */
-                            ((char*)msg)[new_msglen] = '.';
-                            ((char*)msg)[new_msglen+1] = '.';
-                            ((char*)msg)[new_msglen+2] = '.';
+                            ((char*)msg)[new_msglen]     = '.';
+                            ((char*)msg)[new_msglen + 1] = '.';
+                            ((char*)msg)[new_msglen + 2] = '.';
                         }
                         iov[1].iov_len = new_msglen + 3;
                     }
@@ -836,13 +862,15 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
          * "TRUNCATED: <lvl> <comp> ..."
          */
         char warnbuf[128];
-        int w = snprintf(warnbuf, sizeof warnbuf, "TRUNCATED: %s [%llu] [%s]",
-                         lvl_str(level), (unsigned long long)tid, comp ? comp : "-");
+        int  w = snprintf(warnbuf, sizeof warnbuf, "TRUNCATED: %s [%llu] [%s]", lvl_str(level),
+                          (unsigned long long)tid, comp ? comp : "-");
         struct iovec wiov[1];
         wiov[0].iov_base = warnbuf;
-        wiov[0].iov_len = (w > 0) ? (size_t)w : 0;
-        if (wiov[0].iov_len > 0) write_line_iov(level, wiov, 1);
-    } else {
+        wiov[0].iov_len  = (w > 0) ? (size_t)w : 0;
+        if(wiov[0].iov_len > 0) write_line_iov(level, wiov, 1);
+    }
+    else
+    {
         write_line_iov(level, iov, iovcnt);
     }
     free(heap);

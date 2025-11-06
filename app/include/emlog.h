@@ -18,14 +18,15 @@
 #ifndef EMLOG_H
 #define EMLOG_H
 
+#include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <errno.h>
 #include <sys/types.h>
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /**
@@ -35,7 +36,8 @@ extern "C" {
  * syslog names. Use these values when calling emlog_log() or when
  * adjusting the runtime minimum log level via emlog_set_level().
  */
-typedef enum {
+typedef enum
+{
     EML_LEVEL_DBG = 0, /**< Debug-level, very verbose. */
     EML_LEVEL_INFO,    /**< Informational messages. */
     EML_LEVEL_WARN,    /**< Warnings: non-fatal, degrade behavior. */
@@ -51,20 +53,21 @@ typedef enum {
  * exit codes with eml_err_to_exit() or mapped back to their string name
  * with eml_err_name().
  */
-typedef enum {
-    EML_OK = 0,             /**< No error. */
-    EML_TRY_AGAIN,          /**< Try again / interrupted. */
-    EML_TEMP_RESOURCE,      /**< Temporarily out of resources (memory/files). */
-    EML_TEMP_UNAVAILABLE,   /**< Temporary service or network unavailability. */
-    EML_BAD_INPUT,          /**< Invalid input or protocol error. */
-    EML_NOT_FOUND,          /**< Item not found. */
-    EML_PERM,               /**< Permission denied. */
-    EML_CONFLICT,           /**< Conflicting resource / already exists. */
-    EML_FATAL_CONF,         /**< Fatal configuration error. */
-    EML_FATAL_IO,           /**< Fatal I/O error. */
-    EML_FATAL_CRYPTO,       /**< Fatal cryptographic error. */
-    EML_FATAL_BUG,          /**< Internal bug / unexpected state. */
-    EML__COUNT              /**< Internal sentinel (do not use). */
+typedef enum
+{
+    EML_OK = 0,           /**< No error. */
+    EML_TRY_AGAIN,        /**< Try again / interrupted. */
+    EML_TEMP_RESOURCE,    /**< Temporarily out of resources (memory/files). */
+    EML_TEMP_UNAVAILABLE, /**< Temporary service or network unavailability. */
+    EML_BAD_INPUT,        /**< Invalid input or protocol error. */
+    EML_NOT_FOUND,        /**< Item not found. */
+    EML_PERM,             /**< Permission denied. */
+    EML_CONFLICT,         /**< Conflicting resource / already exists. */
+    EML_FATAL_CONF,       /**< Fatal configuration error. */
+    EML_FATAL_IO,         /**< Fatal I/O error. */
+    EML_FATAL_CRYPTO,     /**< Fatal cryptographic error. */
+    EML_FATAL_BUG,        /**< Internal bug / unexpected state. */
+    EML__COUNT            /**< Internal sentinel (do not use). */
 } eml_err_t;
 
 /**
@@ -74,7 +77,8 @@ typedef enum {
  * returned by eml_err_to_exit().
  */
 /*@{*/
-enum {
+enum
+{
     EML_EXIT_OK   = 0, /**< Success */
     EML_EXIT_CONF = 2, /**< Configuration error */
     EML_EXIT_IO   = 3, /**< I/O error */
@@ -185,21 +189,21 @@ void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* f
 /* Short logging macros for easy call-sites. These forward to emlog_log().
  * Example: EML_INFO("main", "listening on %d", port);
  */
-#define EML_DBG(tag, ...) emlog_log(EML_LEVEL_DBG, tag, __VA_ARGS__)
-#define EML_INFO(tag, ...) emlog_log(EML_LEVEL_INFO, tag, __VA_ARGS__)
-#define EML_WARN(tag, ...) emlog_log(EML_LEVEL_WARN, tag, __VA_ARGS__)
+#define EML_DBG(tag, ...)   emlog_log(EML_LEVEL_DBG, tag, __VA_ARGS__)
+#define EML_INFO(tag, ...)  emlog_log(EML_LEVEL_INFO, tag, __VA_ARGS__)
+#define EML_WARN(tag, ...)  emlog_log(EML_LEVEL_WARN, tag, __VA_ARGS__)
 #define EML_ERROR(tag, ...) emlog_log(EML_LEVEL_ERROR, tag, __VA_ARGS__)
-#define EML_CRIT(tag, ...) emlog_log(EML_LEVEL_CRIT, tag, __VA_ARGS__)
+#define EML_CRIT(tag, ...)  emlog_log(EML_LEVEL_CRIT, tag, __VA_ARGS__)
 
 /**
  * @brief Helper that logs errno using the current global errno value.
  *
  * Usage: EML_PERR("mod", "failed to open %s", path);
  */
-#define EML_PERR(tag, fmt, ...)                                   \
-    do                                                            \
-    {                                                             \
-        int __e = errno;                                          \
+#define EML_PERR(tag, fmt, ...)                                         \
+    do                                                                  \
+    {                                                                   \
+        int __e = errno;                                                \
         emlog_log_errno(EML_LEVEL_ERROR, tag, __e, fmt, ##__VA_ARGS__); \
     } while(0)
 
