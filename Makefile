@@ -49,7 +49,7 @@ CLANG_FORMAT := $(shell command -v clang-format 2>/dev/null)
 .PHONY: stress-build stress-run stress-massif stress-helgrind stress-memcheck stress-all
 
 ###############################################################################
-# Stress targets
+# Stress targets  (console-only output)
 ###############################################################################
 
 stress-build: $(LIBNAME) ## Build the stress harness (from tests/stress.c)
@@ -60,55 +60,50 @@ stress-build: $(LIBNAME) ## Build the stress harness (from tests/stress.c)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(STRESS_SRC) -L. -lemlog -pthread -o $(STRESS_BIN)
 
 stress-run: stress-build ## Build and run the stress harness (ARGS default: 10 1000 0)
-	@echo "[stress] running $(STRESS_BIN) with args: $${ARGS:-10 1000 0} (timing -> /tmp/emlog_stress_result.txt)"
+	@echo "[stress] running $(STRESS_BIN) with args: $${ARGS:-10 1000 0}"
 	./$(STRESS_BIN) $${ARGS:-10 1000 0}
 
-stress-massif: stress-build ## Run Massif heap profiler (ARGS default: 10 1000)
-	@echo "[stress-massif] running massif for $(STRESS_BIN) with args: $${ARGS:-10 1000} (ms_print saved when available)"
-	@OUT=$$(mktemp -u /tmp/emlog_massif_XXXXXX.out); \
-	if [ -x "./my_massif_full.sh" ]; then \
-		./my_massif_full.sh $(PWD)/$(STRESS_BIN) $${ARGS:-10 1000}; \
-		echo "[stress-massif] wrapper result: check wrapper output (it may store massif files elsewhere)"; \
-	else \
-		valgrind --tool=massif --time-unit=ms --stacks=yes --massif-out-file=$$OUT ./$(STRESS_BIN) $${ARGS:-10 1000}; \
-		if [ -f $$OUT ]; then \
-			ms_print $$OUT > $${OUT}.txt 2>/dev/null || true; \
-			echo "[stress-massif] massif raw: $$OUT"; \
-			echo "[stress-massif] ms_print saved to: $${OUT}.txt"; \
-		else \
-			echo "[stress-massif] massif did not produce $$OUT"; \
-		fi; \
-	fi
-
-stress-helgrind: stress-build ## Run Helgrind race detector (ARGS default: 20 5000)
-	@echo "[stress-helgrind] running Helgrind (race detector) on $(STRESS_BIN) with args: $${ARGS:-20 5000}"
-	@if [ -x "./my_hlgrnd.sh" ]; then \
-		./my_hlgrnd.sh $(PWD)/$(STRESS_BIN) $${ARGS:-20 5000}; \
-	else \
-		OUT=$$(mktemp -u /tmp/emlog_helgrind_XXXXXX.out); \
-		valgrind --tool=helgrind --log-file=$$OUT ./$(STRESS_BIN) $${ARGS:-20 5000}; \
-		if [ -f $$OUT ]; then \
-			echo "[stress-helgrind] helgrind log: $$OUT"; \
-		else \
-			echo "[stress-helgrind] helgrind produced no log"; \
-		fi; \
-	fi
-
-stress-memcheck: stress-build ## Quick Valgrind Memcheck run (ARGS default: 5 500)
-	@echo "[stress-memcheck] running Valgrind Memcheck on $(STRESS_BIN) with args: $${ARGS:-5 500}"
+stress-memcheck: stress-build ## Valgrind Memcheck (console)
+	@echo "[stress-memcheck] memcheck on $(STRESS_BIN) with args: $${ARGS:-5 500}"
 	@if [ -x "./my_vlgrnd_full.sh" ]; then \
 		./my_vlgrnd_full.sh $(PWD)/$(STRESS_BIN) $${ARGS:-5 500}; \
 	else \
-		OUT=$$(mktemp -u /tmp/emlog_memcheck_XXXXXX.out); \
-		valgrind --tool=memcheck --leak-check=full --log-file=$$OUT ./$(STRESS_BIN) $${ARGS:-5 500}; \
-		if [ -f $$OUT ]; then \
-			cat $$OUT | sed -n '1,200p'; \
-			echo "[stress-memcheck] full log: $$OUT"; \
+		valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
+		         --errors-for-leak-kinds=all ./$(STRESS_BIN) $${ARGS:-5 500}; \
+	fi
+
+stress-helgrind: stress-build ## Helgrind race detector (console)
+	@echo "[stress-helgrind] helgrind on $(STRESS_BIN) with args: $${ARGS:-20 5000}"
+	@if [ -x "./my_hlgrnd.sh" ]; then \
+		./my_hlgrnd.sh $(PWD)/$(STRESS_BIN) $${ARGS:-20 5000}; \
+	else \
+		valgrind --tool=helgrind ./$(STRESS_BIN) $${ARGS:-20 5000}; \
+	fi
+
+stress-massif: stress-build ## Massif heap profiler (prints ms_print to console)
+	@echo "[stress-massif] massif on $(STRESS_BIN) with args: $${ARGS:-10 1000}"
+	@if [ -x "./my_massif_full.sh" ]; then \
+		./my_massif_full.sh $(PWD)/$(STRESS_BIN) $${ARGS:-10 1000}; \
+	else \
+		set -e; \
+		before=$$(ls -1t massif.out.* 2>/dev/null | head -n1 || true); \
+		( valgrind --tool=massif --time-unit=ms --stacks=yes ./$(STRESS_BIN) $${ARGS:-10 1000} ) 2>&1; \
+		after=$$(ls -1t massif.out.* 2>/dev/null | head -n1 || true); \
+		outfile=""; \
+		if [ -n "$$after" ] && [ "$$after" != "$$before" ]; then outfile="$$after"; fi; \
+		if [ -z "$$outfile" ]; then outfile=$$(ls -1t massif.out.* 2>/dev/null | head -n1 || true); fi; \
+		if [ -n "$$outfile" ]; then \
+			echo "\n[stress-massif] ===== ms_print $$outfile ====="; \
+			ms_print "$$outfile" || true; \
+			rm -f "$$outfile"; \
+		else \
+			echo "[stress-massif] no massif output found"; \
 		fi; \
 	fi
 
-stress-all: stress-memcheck stress-massif stress-helgrind ## memcheck -> massif -> helgrind sequence
-	@echo "[stress-all] completed memcheck, massif and helgrind sequence"
+stress-all: stress-memcheck stress-massif stress-helgrind ## memcheck -> massif -> helgrind
+	@echo "[stress-all] done"
+
 
 # --- default ----------------------------------------------------------------
 all: libs ## Default target: build the static library
@@ -156,10 +151,8 @@ endif
 	 | xargs -0 -r $(CLANG_FORMAT) --dry-run -Werror -style=file
 
 help: ## Show this help message (targets with descriptions)
-	@sh -c '\
-	  printf "\nAvailable targets:\n\n"; \
-	  grep -E "^[a-zA-Z0-9_.-]+:.*?##" "$(MAKEFILE_LIST)" | \
-	  sed -E "s/^([a-zA-Z0-9_.-]+):.*?##[ \t]?(.*)/\\1\\t\\2/" | \
-	  awk -F"\\t" '{printf("  %-20s - %s\\n", $$1, $$2)}'; \
-	  printf "\nPass ARGS=\"<threads> <msgs> <enable_ts>\" to stress targets, e.g. ARGS=\"10 1000 0\" make stress-run\n\n"; \
-	'
+	@printf "\nAvailable targets:\n\n"; \
+	grep -E '^[a-zA-Z0-9_.-]+:.*?##' $(MAKEFILE_LIST) | \
+		sed -E 's/^([a-zA-Z0-9_.-]+):.*?##[ \t]?(.*)/\1\t\2/' | \
+		awk -F"\t" '{printf("  %-20s - %s\n", $$1, $$2)}'; \
+	@printf "\nPass ARGS=\"<threads> <msgs> <enable_ts>\" to stress targets, e.g. ARGS=\"10 1000 0\" make stress-run\n\n"
