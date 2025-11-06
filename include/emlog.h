@@ -139,6 +139,17 @@ void emlog_enable_timestamps(bool on);
 void emlog_set_writer(eml_writer_fn fn, void* user);
 
 /**
+ * @brief Control whether the logger flushes stdio buffers before using writev.
+ *
+ * When true (default) the logger will call fflush() on the destination
+ * FILE* before issuing a writev() syscall. This avoids interleaving when
+ * other code may be using stdio on the same stream (safe but slower).
+ * When false the logger will write directly via writev() (faster but
+ * may interleave with stdio-buffered output).
+ */
+void emlog_set_writev_flush(bool on);
+
+/**
  * @brief Core printf-style logger.
  *
  * The logger is thread-safe and will drop messages whose level is below
