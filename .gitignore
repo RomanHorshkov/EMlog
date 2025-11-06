@@ -1,0 +1,16 @@
+# Build artifacts
+build/
+libemlog.a
+test_emlog
+stress_emlog
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
