@@ -4,7 +4,9 @@
  * single, stable `emlog.h`/`emlog.c` pair.
  */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include "emlog.h"
 
 #include <errno.h>
