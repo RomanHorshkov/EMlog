@@ -7,7 +7,7 @@
  * - asserts eml_err_to_exit mappings
  */
 
-#include "../include/emlog.h"
+#include "emlog.h"
 
 #include <assert.h>
 #include <errno.h>

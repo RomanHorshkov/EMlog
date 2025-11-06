@@ -1,10 +1,14 @@
-#include "../include/emlog.h"
+#include "emlog.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 
 struct thr_arg { int id; int messages; };
 
