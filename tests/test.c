@@ -12,12 +12,13 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* capture struct used by the custom writer */
-struct capture {
-    char *buf;
+struct capture
+{
+    char*  buf;
     size_t cap;
     size_t len;
 };
@@ -29,7 +30,7 @@ static ssize_t capture_writer(eml_level_t lvl, const char* line, size_t n, void*
     if(n >= c->cap) n = c->cap - 1;
     memcpy(c->buf, line, n);
     c->buf[n] = '\0';
-    c->len = n;
+    c->len    = n;
     return (ssize_t)n;
 }
 
@@ -137,9 +138,10 @@ static void test_long_message_handling(void)
 
     emlog_set_level(EML_LEVEL_DBG);
     /* create a long message > 2048 to force heap allocation path */
-    size_t n = 5000;
-    char* longmsg = malloc(n + 1);
-    for(size_t i = 0; i < n; ++i) longmsg[i] = (i % 26) + 'a';
+    size_t n       = 5000;
+    char*  longmsg = malloc(n + 1);
+    for(size_t i = 0; i < n; ++i)
+        longmsg[i] = (i % 26) + 'a';
     longmsg[n] = '\0';
 
     emlog_log(EML_LEVEL_INFO, "LONG", "%s", longmsg);
@@ -149,8 +151,8 @@ static void test_long_message_handling(void)
         * performance (emit '...' and a TRUNCATED warning). Accept either
         * condition so tests remain robust.
         */
-    if (!(strstr(c.buf, "abcd") != NULL || strstr(c.buf, "bcde") != NULL ||
-                strstr(c.buf, "...") != NULL || strstr(c.buf, "TRUNCATED") != NULL))
+    if(!(strstr(c.buf, "abcd") != NULL || strstr(c.buf, "bcde") != NULL ||
+         strstr(c.buf, "...") != NULL || strstr(c.buf, "TRUNCATED") != NULL))
     {
         /* if we didn't see the message content or a truncation notice,
             * fail with the captured buffer printed for debugging.
@@ -158,7 +160,7 @@ static void test_long_message_handling(void)
         fprintf(stderr, "Captured buffer: '%s'\n", c.buf);
     }
     assert(strstr(c.buf, "abcd") != NULL || strstr(c.buf, "bcde") != NULL ||
-                    strstr(c.buf, "...") != NULL || strstr(c.buf, "TRUNCATED") != NULL);
+           strstr(c.buf, "...") != NULL || strstr(c.buf, "TRUNCATED") != NULL);
 
     free(longmsg);
     emlog_set_writer(NULL, NULL);
