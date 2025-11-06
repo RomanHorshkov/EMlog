@@ -127,6 +127,11 @@ void emlog_init(int min_level, bool timestamps)
         G.min_level = (eml_level_t)min_level;
     }
     G.use_ts = timestamps ? 1 : 0;
+    /* Ensure timezone data is initialized once to avoid repeated tzfile
+     * reads and allocations when formatting timestamps (strftime with %z)
+     * on every log call. tzset() is idempotent and cheap when already
+     * initialized. */
+    if (G.use_ts) tzset();
     pthread_mutex_unlock(&G.mu);
 }
 
