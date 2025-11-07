@@ -1,21 +1,78 @@
-name: C/C++ CI
+name: CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: ["**"]
   pull_request:
-    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
-  build:
-
+  build-and-test:
+    name: Build & unit tests (quiet)
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make test
-      run: make test
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Build static lib and tests
+        run: make -s
+
+      - name: Run unit tests (output suppressed)
+        run: |
+          # we run the binary directly to keep output silent, but preserve exit code
+          if make -s $(basename test_emlog) >/dev/null 2>&1; then
+            ./test_emlog >/dev/null 2>&1
+          else
+            # fallback: test target may already be built by previous step
+            ./test_emlog >/dev/null 2>&1
+          fi
+
+  valgrind:
+    name: Valgrind suite (memcheck / massif / helgrind)
+    runs-on: ubuntu-latest
+    env:
+      # tweak these to taste; smaller keeps CI snappy
+      MEMCHECK_ARGS: "5 500"
+      MASSIF_ARGS:   "5 500"
+      HELGRIND_ARGS: "10 2000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential valgrind kcachegrind graphviz
+
+      - name: Build stress harness
+        run: |
+          make -s stress-build
+          test -x ./stress_emlog
+
+      - name: Memcheck (prints to console)
+        run: |
+          set -e
+          make -s stress-memcheck ARGS="${MEMCHECK_ARGS}"
+
+      - name: Massif (ms_print to console)
+        run: |
+          set -e
+          make -s stress-massif ARGS="${MASSIF_ARGS}"
+
+      - name: Helgrind (prints to console)
+        run: |
+          set -e
+          make -s stress-helgrind ARGS="${HELGRIND_ARGS}"
