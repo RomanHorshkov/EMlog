@@ -104,6 +104,45 @@ stress-massif: stress-build ## Massif heap profiler (prints ms_print to console)
 stress-all: stress-memcheck stress-massif stress-helgrind ## memcheck -> massif -> helgrind
 	@echo "[stress-all] done"
 
+# ---------------- Warnings & hardening ----------------
+CC_VERSION := $(shell $(CC) -dumpversion 2>/dev/null || echo 0)
+CC_ID      := $(shell $(CC) -dM -E - < /dev/null 2>/dev/null | grep -q __clang__ && echo clang || echo gcc)
+
+WARN_COMMON := \
+  -Wall -Wextra -Wpedantic -Wformat=2 -Wformat-overflow=2 -Wformat-truncation=2 \
+  -Wshadow -Wpointer-arith -Wcast-qual -Wwrite-strings -Wvla \
+  -Wmissing-prototypes -Wmissing-declarations -Wstrict-prototypes \
+  -Wswitch-enum -Wdouble-promotion -Winit-self -Wundef \
+  -Werror=format-security
+
+# compiler-specific sweeteners
+ifeq ($(CC_ID),gcc)
+  WARN_CC := -Wlogical-op -Wduplicated-cond -Wduplicated-branches -Walloca -Warray-bounds=2
+  # GCC static analyzer (off by default; see target 'gcc-analyzer')
+  ANALYZER_CC := -fanalyzer
+else
+  # clang defaults are saner; -Weverything is too noisy:
+  WARN_CC := -Wcomma -Wextra-semi -Wnewline-eof -Wshorten-64-to-32
+  # disable a few noisy ones if you later enable -Weverything:
+  # WARN_CC += -Weverything -Wno-padded -Wno-cast-align -Wno-switch-enum -Wno-disabled-macro-expansion
+endif
+
+SECURITY_FLAGS := \
+  -D_FORTIFY_SOURCE=3 \
+  -fstack-protector-strong \
+  -fno-strict-overflow -fno-delete-null-pointer-checks
+
+# PIE helps even for executables in tests/stress
+HARDEN_LDFLAGS := -Wl,-z,relro -Wl,-z,now
+HARDEN_CFLAGS  := -fPIE
+HARDEN_LDFLAGS_BIN := -pie
+
+# fold into your CFLAGS/CPPFLAGS/LDFLAGS without breaking overrides
+CFLAGS   := $(filter-out -Wall -Wextra -Wpedantic,$(CFLAGS)) \
+            $(WARN_COMMON) $(WARN_CC) $(SECURITY_FLAGS)
+LDFLAGS  := $(HARDEN_LDFLAGS) $(LDFLAGS)
+
+
 
 # --- default ----------------------------------------------------------------
 all: libs ## Default target: build the static library
@@ -120,8 +159,15 @@ $(OBJDIR)/%.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 # --- tests ------------------------------------------------------------------
-$(TEST_BIN): $(TEST_SRC) $(LIBNAME) ## Build test binary
-	$(CC) $(CFLAGS) $(CPPFLAGS) $< -L. -lemlog -pthread -o $@
+# test binary
+$(TEST_BIN): $(TEST_SRC) $(LIBNAME)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
+	    $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
+
+# stress binary
+$(STRESS_BIN): $(STRESS_SRC) $(LIBNAME)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
+	    $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
 
 test: $(TEST_BIN) ## Run unit tests
 	@echo "[test] running $(TEST_BIN)"
@@ -157,6 +203,31 @@ endif
 	if [ -z "$$found" ]; then echo "[format] no source directories found"; exit 0; fi; \
 	find $$found -type f \( -name "*.c" -o -name "*.h" \) -print0 \
 	 | xargs -0 -r $(CLANG_FORMAT) --dry-run -Werror -style=file
+
+# ---------------- Build modes ----------------
+# Usage: make MODE=asan test   |   make MODE=ubsan   |   make MODE=tsan   |   make MODE=msan (clang)
+ASAN_FLAGS := -O1 -g -fsanitize=address -fno-omit-frame-pointer
+UBSAN_FLAGS:= -O1 -g -fsanitize=undefined -fno-omit-frame-pointer
+TSAN_FLAGS := -O1 -g -fsanitize=thread
+MSAN_FLAGS := -O1 -g -fsanitize=memory -fsanitize-memory-track-origins
+
+ifeq ($(MODE),asan)
+  CFLAGS   += $(ASAN_FLAGS)
+  LDFLAGS  += $(ASAN_FLAGS)
+endif
+ifeq ($(MODE),ubsan)
+  CFLAGS   += $(UBSAN_FLAGS)
+  LDFLAGS  += $(UBSAN_FLAGS)
+endif
+ifeq ($(MODE),tsan)
+  CFLAGS   += $(TSAN_FLAGS)
+  LDFLAGS  += $(TSAN_FLAGS)
+endif
+ifeq ($(MODE),msan)
+  CFLAGS   += $(MSAN_FLAGS)
+  LDFLAGS  += $(MSAN_FLAGS)
+endif
+
 
 help: ## Show this help message (targets with descriptions)
 	@printf "\nAvailable targets:\n\n"; \

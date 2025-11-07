@@ -366,6 +366,16 @@ int eml_err_to_exit(eml_err_t e)
 {
     switch(e)
     {
+        
+        case EML_OK:
+        case EML_TRY_AGAIN:
+        case EML_TEMP_UNAVAILABLE:
+        case EML_BAD_INPUT:
+        case EML_NOT_FOUND:
+        case EML_PERM:
+        case EML_CONFLICT:
+            return EML_EXIT_OK;
+        case EML_FATAL_CRYPTO:
         case EML_FATAL_CONF:
             return EML_EXIT_CONF;
         case EML_FATAL_IO:
