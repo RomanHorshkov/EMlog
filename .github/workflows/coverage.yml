@@ -15,26 +15,34 @@ jobs:
     - name: Install deps
       run: |
         sudo apt-get update
-        sudo apt-get install -y lcov gcovr build-essential pkg-config
+        sudo apt-get install -y lcov gcovr build-essential pkg-config jq
         # install cmocka if not present
         sudo apt-get install -y libcunit1-dev libcmocka-dev || true
 
     - name: Build and run coverage
       run: |
-        set -e
+        set -euo pipefail
         make clean
-        # build instrumented library
-        CFLAGS="$${CFLAGS:-} --coverage -O0 -g" LDFLAGS="$${LDFLAGS:-} --coverage" make all
-        # build instrumented unit test and run
-        CFLAGS="$${CFLAGS:-} --coverage -O0 -g" LDFLAGS="$${LDFLAGS:-} --coverage" make $(UNIT_TEST_BIN)
-        ./$(UNIT_TEST_BIN)
-        # produce HTML coverage using gcovr (preferred)
+        # Use project's UT-run which builds instrumented binaries and writes coverage to tests/results
+        make UT-run
+        # Now produce a machine-readable JSON summary (gcovr) and also an XML report
         if command -v gcovr >/dev/null 2>&1; then
-          gcovr -r . --html --html-details -o coverage.html
+          gcovr -r . --xml -o tests/results/UT_coverage.xml >/dev/null 2>&1 || true
+          gcovr -r . --json-summary -o tests/results/coverage.json >/dev/null 2>&1 || true
         else
-          lcov --capture --directory . --output-file coverage.info || true
-          lcov --remove coverage.info '/usr/*' 'tests/*' --output-file coverage.info || true
-          genhtml coverage.info --output-directory coverage-html || true
+          # fallback: try lcov + genhtml; write a small JSON-summary shim
+          lcov --capture --directory . --output-file tests/results/UT_coverage.info >/dev/null 2>&1 || true
+          lcov --remove tests/results/UT_coverage.info '/usr/*' 'tests/*' --output-file tests/results/UT_coverage.info >/dev/null 2>&1 || true
+          genhtml tests/results/UT_coverage.info --output-directory tests/results/UT_coverage_html >/dev/null 2>&1 || true
+          # write a minimal JSON file indicating that coverage was generated (no percent available)
+          printf '{"metrics": {"covered_percent": -1}}' > tests/results/coverage.json || true
+        fi
+        # Attempt to extract coverage percent (if available) into a short text file
+        if [ -f tests/results/coverage.json ]; then
+          COVERAGE_PCT=$(jq -r '.metrics.covered_percent' tests/results/coverage.json 2>/dev/null || echo "-1")
+          printf "%s" "$${COVERAGE_PCT}" > tests/results/coverage-percent.txt
+        else
+          printf "-1" > tests/results/coverage-percent.txt
         fi
 
     - name: Upload coverage artifacts
@@ -42,7 +50,8 @@ jobs:
       with:
         name: coverage-report
         path: |
-          coverage.html
-          coverage-html/**
-          coverage.info
+          tests/results/UT_coverage.html
+          tests/results/UT_coverage.xml
+          tests/results/coverage.json
+          tests/results/coverage-percent.txt
 *** End Patch
