@@ -172,9 +172,6 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
  * docs consistent for readers of the .c file.
  * -------------------------------------------------------------------------- */
 
-/**
- * @see emlog_init in emlog.h
- */
 void emlog_init(int min_level, bool timestamps)
 {
     pthread_mutex_lock(&G.mu);
@@ -196,9 +193,6 @@ void emlog_init(int min_level, bool timestamps)
     pthread_mutex_unlock(&G.mu);
 }
 
-/**
- * @see emlog_set_level in emlog.h
- */
 void emlog_set_level(eml_level_t min_level)
 {
     pthread_mutex_lock(&G.mu);
@@ -206,9 +200,6 @@ void emlog_set_level(eml_level_t min_level)
     pthread_mutex_unlock(&G.mu);
 }
 
-/**
- * @see emlog_enable_timestamps in emlog.h
- */
 void emlog_enable_timestamps(bool on)
 {
     pthread_mutex_lock(&G.mu);
@@ -216,9 +207,6 @@ void emlog_enable_timestamps(bool on)
     pthread_mutex_unlock(&G.mu);
 }
 
-/**
- * @see emlog_set_writer in emlog.h
- */
 void emlog_set_writer(eml_writer_fn fn, void* user)
 {
     pthread_mutex_lock(&G.mu);
@@ -234,9 +222,6 @@ void emlog_set_writev_flush(bool on)
     pthread_mutex_unlock(&G.mu);
 }
 
-/**
- * @see emlog_log in emlog.h
- */
 void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
 {
     pthread_mutex_lock(&G.mu);
@@ -247,9 +232,6 @@ void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
     pthread_mutex_unlock(&G.mu);
 }
 
-/**
- * @see emlog_log_errno in emlog.h
- */
 void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* fmt, ...)
 {
     char    base[768];
@@ -268,9 +250,6 @@ void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* f
 #endif
 }
 
-/**
- * @see eml_from_errno in emlog.h
- */
 eml_err_t eml_from_errno(int e)
 {
     switch(e)
@@ -323,9 +302,6 @@ eml_err_t eml_from_errno(int e)
     }
 }
 
-/**
- * @see eml_err_name in emlog.h
- */
 const char* eml_err_name(eml_err_t e)
 {
     switch(e)
@@ -359,14 +335,10 @@ const char* eml_err_name(eml_err_t e)
     }
 }
 
-/**
- * @see eml_err_to_exit in emlog.h
- */
 int eml_err_to_exit(eml_err_t e)
 {
     switch(e)
     {
-        
         case EML_OK:
         case EML_TRY_AGAIN:
         case EML_TEMP_UNAVAILABLE:
