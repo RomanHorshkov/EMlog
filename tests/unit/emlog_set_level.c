@@ -1,14 +1,14 @@
 /*
- * tests/unit/test_emlog_set_level.c
+ * tests/unit/emlog_set_level.c
  * Minimal, single-file unit test for emlog_set_level using cmocka.
  */
 
-#include <stddef.h>
-#include <stdarg.h>
-#include <setjmp.h>
 #include <cmocka.h>
-#include <string.h>
+#include <setjmp.h>
+#include <stdarg.h>
+#include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "emlog.h"
 
@@ -34,7 +34,7 @@ static ssize_t capture_writer(eml_level_t lvl, const char* line, size_t n, void*
     return (ssize_t)n;
 }
 
-static void test_emlog_set_level_simple(void** state)
+void emlog_set_level_simple(void** state)
 {
     (void)state;
 
@@ -76,12 +76,4 @@ static void test_emlog_set_level_simple(void** state)
 
     emlog_set_writer(NULL, NULL);
     free(c.buf);
-}
-
-int main(void)
-{
-    const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_emlog_set_level_simple),
-    };
-    return cmocka_run_group_tests(tests, NULL, NULL);
 }
