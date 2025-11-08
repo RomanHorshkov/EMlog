@@ -40,7 +40,8 @@ OBJS := $(patsubst %.c,$(OBJDIR)/%.o,$(SRCS))
 # unit tests (cmocka)
 UNIT_TEST_SRC := tests/unit/unit_test_runner.c \
 				tests/unit/emlog_set_level.c \
-				tests/unit/test_emlog_init.c
+			tests/unit/test_emlog_init.c \
+			tests/unit/test_emlog_timestamps.c
 UNIT_TEST_BIN := unit_test_emlog
 
 # try to discover cmocka via pkg-config; fall back to -lcmocka
@@ -103,26 +104,16 @@ UT-build: $(UNIT_TEST_BIN) ## Build unit test binary (cmocka)
 UT-run: ## Build & run unit tests with coverage and write results to tests/results
 	@echo "[UT] running unit tests with coverage"
 	@mkdir -p tests/results
+	# remove stale gcov data files to avoid checksum overwrite warnings
+	@find . -name "*.gcda" -print0 | xargs -0 -r rm -f || true
 	# rebuild library with coverage instrumentation
 	$(MAKE) CFLAGS="$(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h" LDFLAGS="$(LDFLAGS) --coverage" all
 	# compile unit test with coverage flags (force include of stddef/stdarg to satisfy cmocka)
 	$(CC) $(CFLAGS) -D_GNU_SOURCE --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread $(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(UNIT_TEST_BIN)
 	# run unit tests (generates .gcda)
 	./$(UNIT_TEST_BIN)
-	# collect coverage
-	if command -v gcovr >/dev/null 2>&1; then \
-		gcovr -r . --exclude 'tests/' --html --html-details -o tests/results/UT_coverage.html && \
-		gcovr -r . --exclude 'tests/' --xml -o tests/results/UT_coverage.xml && echo "[UT] coverage: tests/results/UT_coverage.html"; \
-	else \
-		if command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then \
-			lcov --capture --directory . --output-file tests/results/UT_coverage.info || true; \
-			lcov --remove tests/results/UT_coverage.info '/usr/*' 'tests/*' --output-file tests/results/UT_coverage.info || true; \
-			genhtml tests/results/UT_coverage.info --output-directory tests/results/UT_coverage_html || true; \
-			echo "[UT] coverage: tests/results/UT_coverage_html/index.html"; \
-		else \
-			echo "[UT] coverage tools not found (gcovr or lcov/genhtml)"; \
-		fi; \
-	fi
+	# collect coverage (suppress verbose tool output)
+	@bash -c 'if command -v gcovr >/dev/null 2>&1; then gcovr -r . --exclude "tests/" --html --html-details -o tests/results/UT_coverage.html > /dev/null 2>&1 && gcovr -r . --exclude "tests/" --xml -o tests/results/UT_coverage.xml > /dev/null 2>&1 && echo "[UT] coverage: tests/results/UT_coverage.html"; elif command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then lcov --capture --directory . --output-file tests/results/UT_coverage.info > /dev/null 2>&1 || true; lcov --remove tests/results/UT_coverage.info "/usr/*" "tests/*" --output-file tests/results/UT_coverage.info > /dev/null 2>&1 || true; genhtml tests/results/UT_coverage.info --output-directory tests/results/UT_coverage_html > /dev/null 2>&1 || true; echo "[UT] coverage: tests/results/UT_coverage_html/index.html"; else echo "[UT] coverage tools not found (gcovr or lcov/genhtml)"; fi'
 # ---------------- Warnings & hardening ----------------
 CC_VERSION := $(shell $(CC) -dumpversion 2>/dev/null || echo 0)
 CC_ID      := $(shell $(CC) -dM -E - < /dev/null 2>/dev/null | grep -q __clang__ && echo clang || echo gcc)

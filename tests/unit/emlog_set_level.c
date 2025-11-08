@@ -11,6 +11,7 @@
 #include <string.h>
 
 #include "emlog.h"
+#include "unit_tests.h"
 
 struct capture
 {
