@@ -26,7 +26,7 @@ jobs:
       - name: Install toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential
+          sudo apt-get install -y build-essential pkg-config libcmocka-dev lcov gcovr jq
 
       - name: Build static lib and unit-test binary
         run: |
