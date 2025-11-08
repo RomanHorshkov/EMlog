@@ -54,64 +54,30 @@ STRESS_BIN := stress_emlog
 CLANG_FORMAT := $(shell command -v clang-format 2>/dev/null)
 
 .PHONY: all libs test clean format format-check help
-.PHONY: stress-build stress-run stress-massif stress-helgrind stress-memcheck stress-all
+.PHONY: UT-build UT-run IT-build IT-run
+.PHONY: coverage
 
-###############################################################################
-# Stress targets  (console-only output)
-###############################################################################
+# Simplified integration test (IT) and unit test (UT) targets
+# IT-build/IT-run: build and run integration/stress harness
+# UT-build/UT-run: build and run unit tests
 
-stress-build: $(LIBNAME) ## Build the stress harness (from tests/stress.c)
+IT-build: $(STRESS_BIN) ## Build integration (stress) binary
 	@if [ -z "$(STRESS_SRC)" ]; then \
-		echo "[stress] no stress source found (create tests/stress.c or src/stress.c)"; exit 1; \
+		echo "[IT] no integration source found (create tests/stress.c or src/stress.c)"; exit 1; \
 	fi
-	@echo "[stress] building $(STRESS_BIN) from $(STRESS_SRC)"
+	@echo "[IT] building $(STRESS_BIN) from $(STRESS_SRC)"
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(STRESS_SRC) -L. -lemlog -pthread -o $(STRESS_BIN)
 
-stress-run: stress-build ## Build and run the stress harness (ARGS default: 10 1000 0)
-	@echo "[stress] running $(STRESS_BIN) with args: $${ARGS:-10 1000 0}"
+IT-run: IT-build ## Run the integration test (stress harness)
+	@echo "[IT] running $(STRESS_BIN) with args: $${ARGS:-10 1000 0}"
 	./$(STRESS_BIN) $${ARGS:-10 1000 0}
 
-stress-memcheck: stress-build ## Valgrind Memcheck (console)
-	@echo "[stress-memcheck] memcheck on $(STRESS_BIN) with args: $${ARGS:-5 500}"
-	@if [ -x "./my_vlgrnd_full.sh" ]; then \
-		./my_vlgrnd_full.sh $(PWD)/$(STRESS_BIN) $${ARGS:-5 500}; \
-	else \
-		valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all \
-		         --errors-for-leak-kinds=all ./$(STRESS_BIN) $${ARGS:-5 500}; \
-	fi
+UT-build: $(UNIT_TEST_BIN) ## Build unit test binary (cmocka)
+	@echo "[UT] built $(UNIT_TEST_BIN)"
 
-stress-helgrind: stress-build ## Helgrind race detector (console)
-	@echo "[stress-helgrind] helgrind on $(STRESS_BIN) with args: $${ARGS:-20 5000}"
-	@if [ -x "./my_hlgrnd.sh" ]; then \
-		./my_hlgrnd.sh $(PWD)/$(STRESS_BIN) $${ARGS:-20 5000}; \
-	else \
-		valgrind --tool=helgrind ./$(STRESS_BIN) $${ARGS:-20 5000}; \
-	fi
-
-stress-massif: stress-build ## Massif heap profiler (prints ms_print to console)
-	@echo "[stress-massif] massif on $(STRESS_BIN) with args: $${ARGS:-10 1000}"
-	@if [ -x "./my_massif_full.sh" ]; then \
-		./my_massif_full.sh $(PWD)/$(STRESS_BIN) $${ARGS:-10 1000}; \
-	else \
-		set -e; \
-		before=$$(ls -1t massif.out.* 2>/dev/null | head -n1 || true); \
-		( valgrind --tool=massif --time-unit=ms --stacks=yes ./$(STRESS_BIN) $${ARGS:-10 1000} ) 2>&1; \
-		after=$$(ls -1t massif.out.* 2>/dev/null | head -n1 || true); \
-		outfile=""; \
-		if [ -n "$$after" ] && [ "$$after" != "$$before" ]; then outfile="$$after"; fi; \
-		if [ -z "$$outfile" ]; then outfile=$$(ls -1t massif.out.* 2>/dev/null | head -n1 || true); fi; \
-		if [ -n "$$outfile" ]; then \
-			echo "\n[stress-massif] ===== ms_print $$outfile ====="; \
-			ms_print "$$outfile" || true; \
-			rm -f "$$outfile"; \
-		else \
-			echo "[stress-massif] no massif output found"; \
-		fi; \
-	fi
-
-stress-all: stress-memcheck stress-massif stress-helgrind ## memcheck -> massif -> helgrind
-	@echo "[stress-all] done"
-
+UT-run: UT-build ## Run unit tests (cmocka)
+	@echo "[UT] running $(UNIT_TEST_BIN)"
+	./$(UNIT_TEST_BIN)
 # ---------------- Warnings & hardening ----------------
 CC_VERSION := $(shell $(CC) -dumpversion 2>/dev/null || echo 0)
 CC_ID      := $(shell $(CC) -dM -E - < /dev/null 2>/dev/null | grep -q __clang__ && echo clang || echo gcc)
@@ -189,6 +155,32 @@ test: $(TEST_BIN) $(UNIT_TEST_BIN) ## Run unit tests (legacy + cmocka)
 	./$(TEST_BIN)
 	@echo "[test] running $(UNIT_TEST_BIN)"
 	./$(UNIT_TEST_BIN)
+
+# coverage target: build instrumented objects, run unit tests and generate reports
+# Uses gcov/gcovr if available. Produces coverage-html/ or coverage.html
+
+coverage: clean
+	@echo "[coverage] building instrumented binaries (gcc/gcov)"
+	# Add coverage flags and debug-friendly options and export for recursive make
+	$(MAKE) CFLAGS="$(CFLAGS) --coverage -O0 -g" LDFLAGS="$(LDFLAGS) --coverage" all
+	@echo "[coverage] building unit tests with coverage flags"
+	$(CC) $(CFLAGS) --coverage -O0 -g $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread \
+		$(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(UNIT_TEST_BIN)
+	@echo "[coverage] running unit test to generate .gcda files"
+	./$(UNIT_TEST_BIN)
+	@echo "[coverage] collecting coverage via gcovr (if available)"
+	if command -v gcovr >/dev/null 2>&1; then \
+		gcovr -r . --exclude 'tests/' --html --html-details -o coverage.html && echo "[coverage] wrote coverage.html"; \
+	else \
+		if command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then \
+			lcov --capture --directory . --output-file coverage.info || true; \
+			lcov --remove coverage.info '/usr/*' 'tests/*' --output-file coverage.info || true; \
+			genhtml coverage.info --output-directory coverage-html || true; \
+			echo "[coverage] wrote coverage-html/index.html"; \
+		else \
+			echo "[coverage] gcovr or lcov/genhtml not found; install gcovr or lcov"; exit 1; \
+		fi \
+	fi
 
 # --- housekeeping ------------------------------------------------------------
 clean: ## Remove build artifacts

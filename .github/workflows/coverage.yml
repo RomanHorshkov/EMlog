@@ -1,0 +1,48 @@
+name: coverage
+
+on:
+  push:
+    branches: [ master, smaller_updates ]
+  pull_request:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install deps
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y lcov gcovr build-essential pkg-config
+        # install cmocka if not present
+        sudo apt-get install -y libcunit1-dev libcmocka-dev || true
+
+    - name: Build and run coverage
+      run: |
+        set -e
+        make clean
+        # build instrumented library
+        CFLAGS="$${CFLAGS:-} --coverage -O0 -g" LDFLAGS="$${LDFLAGS:-} --coverage" make all
+        # build instrumented unit test and run
+        CFLAGS="$${CFLAGS:-} --coverage -O0 -g" LDFLAGS="$${LDFLAGS:-} --coverage" make $(UNIT_TEST_BIN)
+        ./$(UNIT_TEST_BIN)
+        # produce HTML coverage using gcovr (preferred)
+        if command -v gcovr >/dev/null 2>&1; then
+          gcovr -r . --html --html-details -o coverage.html
+        else
+          lcov --capture --directory . --output-file coverage.info || true
+          lcov --remove coverage.info '/usr/*' 'tests/*' --output-file coverage.info || true
+          genhtml coverage.info --output-directory coverage-html || true
+        fi
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          coverage.html
+          coverage-html/**
+          coverage.info
+*** End Patch

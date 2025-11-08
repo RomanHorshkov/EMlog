@@ -3,12 +3,12 @@
  * Minimal, single-file unit test for emlog_set_level using cmocka.
  */
 
-#include <cmocka.h>
-#include <setjmp.h>
-#include <stdarg.h>
 #include <stddef.h>
-#include <stdlib.h>
+#include <stdarg.h>
+#include <setjmp.h>
+#include <cmocka.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "emlog.h"
 
