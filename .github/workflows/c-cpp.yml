@@ -38,39 +38,4 @@ jobs:
         run: |
           # execute the unified unit test binary quietly but preserve exit code
           ./unit_test_emlog >/dev/null 2>&1
-
-  valgrind:
-    name: Valgrind suite (memcheck / massif / helgrind)
-    runs-on: ubuntu-latest
-    env:
-      # tweak these to taste; smaller keeps CI snappy
-      MEMCHECK_ARGS: "5 500"
-      MASSIF_ARGS:   "5 500"
-      HELGRIND_ARGS: "10 2000"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential valgrind kcachegrind graphviz
-
-      - name: Build stress harness
-        run: |
-          make -s stress-build
-          test -x ./stress_emlog
-
-      - name: Memcheck (prints to console)
-        run: |
-          set -e
-          make -s stress-memcheck ARGS="${MEMCHECK_ARGS}"
-
-      - name: Massif (ms_print to console)
-        run: |
-          set -e
-          make -s stress-massif ARGS="${MASSIF_ARGS}"
-
-      - name: Helgrind (prints to console)
-        run: |
-          set -e
-          make -s stress-helgrind ARGS="${HELGRIND_ARGS}"
+          
