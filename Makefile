@@ -174,8 +174,8 @@ $(OBJDIR)/%.o: %.c
 # unit test target (cmocka)
 $(UNIT_TEST_BIN): $(UNIT_TEST_SRC) $(LIBNAME)
 	@echo "[unit-test] building $(UNIT_TEST_BIN)"
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
-	    $(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
+	$(CC) -D_GNU_SOURCE -include stddef.h -include stdarg.h -include setjmp.h $(CFLAGS) $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread \
+		$(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
 
 # stress binary
 $(STRESS_BIN): $(STRESS_SRC) $(LIBNAME)
