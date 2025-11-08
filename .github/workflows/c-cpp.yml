@@ -28,18 +28,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential
 
-      - name: Build static lib and tests
-        run: make -s
+      - name: Build static lib and unit-test binary
+        run: |
+          set -e
+          # build library and the unit test binary (quiet)
+          make -s unit_test_emlog
 
       - name: Run unit tests (output suppressed)
         run: |
-          # we run the binary directly to keep output silent, but preserve exit code
-          if make -s $(basename test_emlog) >/dev/null 2>&1; then
-            ./test_emlog >/dev/null 2>&1
-          else
-            # fallback: test target may already be built by previous step
-            ./test_emlog >/dev/null 2>&1
-          fi
+          # execute the unified unit test binary quietly but preserve exit code
+          ./unit_test_emlog >/dev/null 2>&1
 
   valgrind:
     name: Valgrind suite (memcheck / massif / helgrind)
