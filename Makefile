@@ -39,6 +39,14 @@ OBJS := $(patsubst %.c,$(OBJDIR)/%.o,$(SRCS))
 TEST_SRC  := tests/test.c
 TEST_BIN  := test_emlog
 
+# unit tests (cmocka)
+UNIT_TEST_SRC := tests/unit/test_emlog_set_level.c
+UNIT_TEST_BIN := unit_test_emlog
+
+# try to discover cmocka via pkg-config; fall back to -lcmocka
+PKG_CMOCKA_CFLAGS := $(shell pkg-config --cflags cmocka 2>/dev/null || echo "")
+PKG_CMOCKA_LIBS  := $(shell pkg-config --libs cmocka 2>/dev/null || echo "-lcmocka")
+
 # stress harness (optional location)
 STRESS_SRC := $(firstword $(wildcard tests/stress.c src/stress.c app/src/stress.c))
 STRESS_BIN := stress_emlog
@@ -160,18 +168,27 @@ $(OBJDIR)/%.o: %.c
 
 # --- tests ------------------------------------------------------------------
 # test binary
+
 $(TEST_BIN): $(TEST_SRC) $(LIBNAME)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
 	    $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
+
+# unit test target (cmocka)
+$(UNIT_TEST_BIN): $(UNIT_TEST_SRC) $(LIBNAME)
+	@echo "[unit-test] building $(UNIT_TEST_BIN)"
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
+	    $(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
 
 # stress binary
 $(STRESS_BIN): $(STRESS_SRC) $(LIBNAME)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
 	    $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
 
-test: $(TEST_BIN) ## Run unit tests
+test: $(TEST_BIN) $(UNIT_TEST_BIN) ## Run unit tests (legacy + cmocka)
 	@echo "[test] running $(TEST_BIN)"
 	./$(TEST_BIN)
+	@echo "[test] running $(UNIT_TEST_BIN)"
+	./$(UNIT_TEST_BIN)
 
 # --- housekeeping ------------------------------------------------------------
 clean: ## Remove build artifacts
