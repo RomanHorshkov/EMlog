@@ -1,6 +1,8 @@
 EMLog — Minimal thread-safe logging and canonical error utilities
 ===============================================================
 
+[![CI](https://github.com/RomanHorshkov/EMlog/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/c-cpp.yml)
+
 Overview
 --------
 
