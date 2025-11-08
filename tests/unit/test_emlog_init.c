@@ -90,6 +90,6 @@ static void test_init_env_parsing(void **state)
 }
 
 /* expose tests to runner */
-void test_emlog_init_default_env(void **state) { test_init_default_env(state); }
-void test_emlog_init_explicit_dbg(void **state) { test_init_explicit_dbg(state); }
-void test_emlog_init_env_parsing(void **state) { test_init_env_parsing(state); }
+void emlog_init_default_env(void **state) { test_init_default_env(state); }
+void emlog_init_explicit_dbg(void **state) { test_init_explicit_dbg(state); }
+void emlog_init_env_parsing(void **state) { test_init_env_parsing(state); }
