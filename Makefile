@@ -8,6 +8,7 @@ CFLAGS   ?= -Wall -Wextra -Wpedantic -std=c11 -O2
 SRCDIRS  := app/src src
 INCDIRS  := app/include include
 CPPFLAGS := $(addprefix -I, $(INCDIRS))
+CPPFLAGS += -D_GNU_SOURCE
 OBJDIR   := build
 LIBNAME  := libemlog.a
 
@@ -28,6 +29,7 @@ CFLAGS   ?= -Wall -Wextra -Wpedantic -std=c11 -O2
 SRCDIRS  := app/src src
 INCDIRS  := app/include include
 CPPFLAGS := $(addprefix -I, $(INCDIRS))
+CPPFLAGS += -D_GNU_SOURCE
 OBJDIR   := build
 LIBNAME  := libemlog.a
 
@@ -73,7 +75,7 @@ IT-run: IT-build ## Run the integration test (stress harness)
 IT-run-coverage: ## Run integration with coverage and write results to tests/results
 	@echo "[IT] running integration tests with coverage"
 	@mkdir -p tests/results
-	$(MAKE) CFLAGS="$(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h" LDFLAGS="$(LDFLAGS) --coverage" all
+	$(MAKE) CFLAGS="$(CFLAGS) -D_GNU_SOURCE --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h" LDFLAGS="$(LDFLAGS) --coverage" all
 	$(CC) $(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(HARDEN_CFLAGS) $(STRESS_SRC) -L. -lemlog -pthread $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(STRESS_BIN)
 	./$(STRESS_BIN) $${ARGS:-10 1000 0}
 	if command -v gcovr >/dev/null 2>&1; then \
@@ -104,7 +106,7 @@ UT-run: ## Build & run unit tests with coverage and write results to tests/resul
 	# rebuild library with coverage instrumentation
 	$(MAKE) CFLAGS="$(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h" LDFLAGS="$(LDFLAGS) --coverage" all
 	# compile unit test with coverage flags (force include of stddef/stdarg to satisfy cmocka)
-	$(CC) $(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread $(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(UNIT_TEST_BIN)
+	$(CC) $(CFLAGS) -D_GNU_SOURCE --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread $(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(UNIT_TEST_BIN)
 	# run unit tests (generates .gcda)
 	./$(UNIT_TEST_BIN)
 	# collect coverage
