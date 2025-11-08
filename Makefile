@@ -35,12 +35,10 @@ LIBNAME  := libemlog.a
 SRCS := $(foreach d,$(SRCDIRS),$(wildcard $(d)/*.c))
 OBJS := $(patsubst %.c,$(OBJDIR)/%.o,$(SRCS))
 
-# test binary
-TEST_SRC  := tests/test.c
-TEST_BIN  := test_emlog
-
 # unit tests (cmocka)
-UNIT_TEST_SRC := tests/unit/test_emlog_set_level.c
+UNIT_TEST_SRC := tests/unit/unit_test_runner.c \
+				tests/unit/emlog_set_level.c \
+				tests/unit/test_emlog_init.c
 UNIT_TEST_BIN := unit_test_emlog
 
 # try to discover cmocka via pkg-config; fall back to -lcmocka
@@ -53,7 +51,7 @@ STRESS_BIN := stress_emlog
 
 CLANG_FORMAT := $(shell command -v clang-format 2>/dev/null)
 
-.PHONY: all libs test clean format format-check help
+.PHONY: all libs clean format format-check help
 .PHONY: UT-build UT-run IT-build IT-run
 .PHONY: coverage
 
@@ -72,12 +70,57 @@ IT-run: IT-build ## Run the integration test (stress harness)
 	@echo "[IT] running $(STRESS_BIN) with args: $${ARGS:-10 1000 0}"
 	./$(STRESS_BIN) $${ARGS:-10 1000 0}
 
+IT-run-coverage: ## Run integration with coverage and write results to tests/results
+	@echo "[IT] running integration tests with coverage"
+	@mkdir -p tests/results
+	$(MAKE) CFLAGS="$(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h" LDFLAGS="$(LDFLAGS) --coverage" all
+	$(CC) $(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(HARDEN_CFLAGS) $(STRESS_SRC) -L. -lemlog -pthread $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(STRESS_BIN)
+	./$(STRESS_BIN) $${ARGS:-10 1000 0}
+	if command -v gcovr >/dev/null 2>&1; then \
+		gcovr -r . --exclude 'tests/' --html --html-details -o tests/results/IT_coverage.html && \
+		gcovr -r . --exclude 'tests/' --xml -o tests/results/IT_coverage.xml && echo "[IT] coverage: tests/results/IT_coverage.html"; \
+		gcovr -r . --exclude 'tests/' --html --html-details -o tests/results/combined_coverage.html || true; \
+	else \
+		if command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then \
+			lcov --capture --directory . --output-file tests/results/IT_coverage.info || true; \
+			lcov --remove tests/results/IT_coverage.info '/usr/*' 'tests/*' --output-file tests/results/IT_coverage.info || true; \
+			genhtml tests/results/IT_coverage.info --output-directory tests/results/IT_coverage_html || true; \
+			# combined
+			lcov --capture --directory . --output-file tests/results/combined_coverage.info || true; \
+			lcov --remove tests/results/combined_coverage.info '/usr/*' 'tests/*' --output-file tests/results/combined_coverage.info || true; \
+			genhtml tests/results/combined_coverage.info --output-directory tests/results/combined_coverage_html || true; \
+			echo "[IT] coverage: tests/results/IT_coverage_html/index.html"; \
+		else \
+			echo "[IT] coverage tools not found (gcovr or lcov/genhtml)"; \
+		fi; \
+	fi
+
 UT-build: $(UNIT_TEST_BIN) ## Build unit test binary (cmocka)
 	@echo "[UT] built $(UNIT_TEST_BIN)"
 
-UT-run: UT-build ## Run unit tests (cmocka)
-	@echo "[UT] running $(UNIT_TEST_BIN)"
+UT-run: ## Build & run unit tests with coverage and write results to tests/results
+	@echo "[UT] running unit tests with coverage"
+	@mkdir -p tests/results
+	# rebuild library with coverage instrumentation
+	$(MAKE) CFLAGS="$(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h" LDFLAGS="$(LDFLAGS) --coverage" all
+	# compile unit test with coverage flags (force include of stddef/stdarg to satisfy cmocka)
+	$(CC) $(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread $(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(UNIT_TEST_BIN)
+	# run unit tests (generates .gcda)
 	./$(UNIT_TEST_BIN)
+	# collect coverage
+	if command -v gcovr >/dev/null 2>&1; then \
+		gcovr -r . --exclude 'tests/' --html --html-details -o tests/results/UT_coverage.html && \
+		gcovr -r . --exclude 'tests/' --xml -o tests/results/UT_coverage.xml && echo "[UT] coverage: tests/results/UT_coverage.html"; \
+	else \
+		if command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then \
+			lcov --capture --directory . --output-file tests/results/UT_coverage.info || true; \
+			lcov --remove tests/results/UT_coverage.info '/usr/*' 'tests/*' --output-file tests/results/UT_coverage.info || true; \
+			genhtml tests/results/UT_coverage.info --output-directory tests/results/UT_coverage_html || true; \
+			echo "[UT] coverage: tests/results/UT_coverage_html/index.html"; \
+		else \
+			echo "[UT] coverage tools not found (gcovr or lcov/genhtml)"; \
+		fi; \
+	fi
 # ---------------- Warnings & hardening ----------------
 CC_VERSION := $(shell $(CC) -dumpversion 2>/dev/null || echo 0)
 CC_ID      := $(shell $(CC) -dM -E - < /dev/null 2>/dev/null | grep -q __clang__ && echo clang || echo gcc)
@@ -133,11 +176,7 @@ $(OBJDIR)/%.o: %.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 # --- tests ------------------------------------------------------------------
-# test binary
-
-$(TEST_BIN): $(TEST_SRC) $(LIBNAME)
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
-	    $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
+# legacy test binary removed; use UT-build/UT-run for unit tests
 
 # unit test target (cmocka)
 $(UNIT_TEST_BIN): $(UNIT_TEST_SRC) $(LIBNAME)
@@ -150,41 +189,11 @@ $(STRESS_BIN): $(STRESS_SRC) $(LIBNAME)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
 	    $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
 
-test: $(TEST_BIN) $(UNIT_TEST_BIN) ## Run unit tests (legacy + cmocka)
-	@echo "[test] running $(TEST_BIN)"
-	./$(TEST_BIN)
-	@echo "[test] running $(UNIT_TEST_BIN)"
-	./$(UNIT_TEST_BIN)
-
-# coverage target: build instrumented objects, run unit tests and generate reports
-# Uses gcov/gcovr if available. Produces coverage-html/ or coverage.html
-
-coverage: clean
-	@echo "[coverage] building instrumented binaries (gcc/gcov)"
-	# Add coverage flags and debug-friendly options and export for recursive make
-	$(MAKE) CFLAGS="$(CFLAGS) --coverage -O0 -g" LDFLAGS="$(LDFLAGS) --coverage" all
-	@echo "[coverage] building unit tests with coverage flags"
-	$(CC) $(CFLAGS) --coverage -O0 -g $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread \
-		$(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(UNIT_TEST_BIN)
-	@echo "[coverage] running unit test to generate .gcda files"
-	./$(UNIT_TEST_BIN)
-	@echo "[coverage] collecting coverage via gcovr (if available)"
-	if command -v gcovr >/dev/null 2>&1; then \
-		gcovr -r . --exclude 'tests/' --html --html-details -o coverage.html && echo "[coverage] wrote coverage.html"; \
-	else \
-		if command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then \
-			lcov --capture --directory . --output-file coverage.info || true; \
-			lcov --remove coverage.info '/usr/*' 'tests/*' --output-file coverage.info || true; \
-			genhtml coverage.info --output-directory coverage-html || true; \
-			echo "[coverage] wrote coverage-html/index.html"; \
-		else \
-			echo "[coverage] gcovr or lcov/genhtml not found; install gcovr or lcov"; exit 1; \
-		fi \
-	fi
+## coverage is produced as part of UT-run and IT-run; standalone target removed
 
 # --- housekeeping ------------------------------------------------------------
 clean: ## Remove build artifacts
-	rm -rf $(OBJDIR) $(LIBNAME) $(TEST_BIN) $(STRESS_BIN)
+	rm -rf $(OBJDIR) $(LIBNAME) $(STRESS_BIN)
 
 # --- formatting (requires .clang-format at repo root) -----------------------
 format: ## Format sources using .clang-format
@@ -239,8 +248,8 @@ endif
 
 
 help: ## Show this help message (targets with descriptions)
-	@printf "\nAvailable targets:\n\n"; \
+	printf "\nAvailable targets:\n\n"; \
 	grep -E '^[a-zA-Z0-9_.-]+:.*?##' $(MAKEFILE_LIST) | \
 		sed -E 's/^([a-zA-Z0-9_.-]+):.*?##[ \t]?(.*)/\1\t\2/' | \
 		awk -F"\t" '{printf("  %-20s - %s\n", $$1, $$2)}'; \
-	@printf "\nPass ARGS=\"<threads> <msgs> <enable_ts>\" to stress targets, e.g. ARGS=\"10 1000 0\" make stress-run\n\n"
+	printf "\nPass ARGS=\"<threads> <msgs> <enable_ts>\" to IT targets, e.g. ARGS=\"10 1000 0\" make IT-run\n\n"
