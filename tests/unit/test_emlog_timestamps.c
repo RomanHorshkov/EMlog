@@ -13,13 +13,13 @@
  * global state (writer) on exit.
  */
 
+#include <cmocka.h>
+#include <ctype.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <setjmp.h>
-#include <cmocka.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 
 #include "emlog.h"
 #include "unit_tests.h"
@@ -31,18 +31,24 @@
  * contiguous line buffer (no trailing newline), so we inspect the
  * captured bytes directly.
  */
-struct capture { char *buf; size_t cap; size_t len; };
+struct capture
+{
+    char*  buf;
+    size_t cap;
+    size_t len;
+};
 
-static ssize_t capture_writer(eml_level_t lvl, const char *line, size_t n, void *user)
+static ssize_t capture_writer(eml_level_t lvl, const char* line, size_t n, void* user)
 {
     (void)lvl;
-    struct capture *c = (struct capture*)user;
-    size_t avail = (c->cap > 0) ? c->cap - 1 - c->len : 0;
-    size_t to_copy = (n < avail) ? n : avail;
-    if (to_copy > 0) {
+    struct capture* c       = (struct capture*)user;
+    size_t          avail   = (c->cap > 0) ? c->cap - 1 - c->len : 0;
+    size_t          to_copy = (n < avail) ? n : avail;
+    if(to_copy > 0)
+    {
         memcpy(c->buf + c->len, line, to_copy);
-        c->len += to_copy;
-        c->buf[c->len] = '\0';
+        c->len         += to_copy;
+        c->buf[c->len]  = '\0';
     }
     /* Return the number of bytes the logger asked us to "write". The
      * logger ignores the return value for custom writers. */
@@ -61,15 +67,16 @@ static ssize_t capture_writer(eml_level_t lvl, const char *line, size_t n, void 
  * These checks make the test resistant to small formatting changes but
  * still ensure that timestamps are emitted when enabled.
  */
-static void test_enable_timestamps_true(void **state)
+static void test_enable_timestamps_true(void** state)
 {
     (void)state;
     /* Prepare capture buffer */
     struct capture c = {0};
-    c.cap = 2048;
-    c.buf = malloc(c.cap);
+    c.cap            = 2048;
+    c.buf            = malloc(c.cap);
     assert_non_null(c.buf);
-    c.len = 0; c.buf[0] = '\0';
+    c.len    = 0;
+    c.buf[0] = '\0';
 
     /* Install writer and enable timestamps */
     emlog_set_writer(capture_writer, &c);
@@ -89,7 +96,8 @@ static void test_enable_timestamps_true(void **state)
     /* Check minimal length */
     assert_true(c.len >= 19);
     /* digits at expected positions */
-    for(int i = 0; i < 4; ++i) assert_true(isdigit((unsigned char)c.buf[i])); /* YYYY */
+    for(int i = 0; i < 4; ++i)
+        assert_true(isdigit((unsigned char)c.buf[i])); /* YYYY */
     assert_int_equal(c.buf[4], '-');
     assert_true(isdigit((unsigned char)c.buf[5]));
     assert_true(isdigit((unsigned char)c.buf[6]));
@@ -120,14 +128,15 @@ static void test_enable_timestamps_true(void **state)
  * header layout. We assert that the captured buffer starts with the
  * three-letter level name to confirm the timestamp was omitted.
  */
-static void test_enable_timestamps_false(void **state)
+static void test_enable_timestamps_false(void** state)
 {
     (void)state;
     struct capture c = {0};
-    c.cap = 2048;
-    c.buf = malloc(c.cap);
+    c.cap            = 2048;
+    c.buf            = malloc(c.cap);
     assert_non_null(c.buf);
-    c.len = 0; c.buf[0] = '\0';
+    c.len    = 0;
+    c.buf[0] = '\0';
 
     /* Install writer and disable timestamps */
     emlog_set_writer(capture_writer, &c);
@@ -154,12 +163,16 @@ static void test_enable_timestamps_false(void **state)
  * timestamp-like output, then we disable them and confirm the
  * non-timestamped format.
  */
-static void test_enable_timestamps_toggle(void **state)
+static void test_enable_timestamps_toggle(void** state)
 {
     (void)state;
     /* First capture: timestamps ON */
     struct capture a = {0};
-    a.cap = 1024; a.buf = malloc(a.cap); assert_non_null(a.buf); a.len = 0; a.buf[0] = '\0';
+    a.cap            = 1024;
+    a.buf            = malloc(a.cap);
+    assert_non_null(a.buf);
+    a.len    = 0;
+    a.buf[0] = '\0';
     emlog_set_writer(capture_writer, &a);
     emlog_set_level(EML_LEVEL_INFO);
     emlog_enable_timestamps(true);
@@ -171,7 +184,11 @@ static void test_enable_timestamps_toggle(void **state)
 
     /* Second capture: timestamps OFF */
     struct capture b = {0};
-    b.cap = 1024; b.buf = malloc(b.cap); assert_non_null(b.buf); b.len = 0; b.buf[0] = '\0';
+    b.cap            = 1024;
+    b.buf            = malloc(b.cap);
+    assert_non_null(b.buf);
+    b.len    = 0;
+    b.buf[0] = '\0';
     emlog_set_writer(capture_writer, &b);
     emlog_set_level(EML_LEVEL_INFO);
     emlog_enable_timestamps(false);
@@ -183,6 +200,15 @@ static void test_enable_timestamps_toggle(void **state)
 }
 
 /* Expose these tests so the unified runner can reference them by name. */
-void emlog_timestamps_true(void **state) { test_enable_timestamps_true(state); }
-void emlog_timestamps_false(void **state) { test_enable_timestamps_false(state); }
-void emlog_timestamps_toggle(void **state) { test_enable_timestamps_toggle(state); }
+void emlog_timestamps_true(void** state)
+{
+    test_enable_timestamps_true(state);
+}
+void emlog_timestamps_false(void** state)
+{
+    test_enable_timestamps_false(state);
+}
+void emlog_timestamps_toggle(void** state)
+{
+    test_enable_timestamps_toggle(state);
+}
