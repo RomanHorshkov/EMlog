@@ -4,9 +4,9 @@
  * These tests exercise the public journald-related helpers regardless
  * of whether the library was compiled with real journald support. When
  * libsystemd is present the tests verify that enabling the journald
- * writer detaches any custom writer and that disabling restores normal
- * operation. When journald is unavailable the tests confirm that the
- * helper simply reports failure and leaves the existing writer intact.
+ * writer detaches any custom writer. When journald is unavailable the
+ * tests confirm that the helper simply reports failure and leaves the
+ * existing writer intact.
  */
 
 #include <cmocka.h>
@@ -41,7 +41,7 @@ static ssize_t capture_writer(eml_level_t lvl, const char* line, size_t n, void*
     return (ssize_t)n;
 }
 
-static void test_journald_enable_disable(void** state)
+static void test_journald_enable_behavior(void** state)
 {
     (void)state;
 
@@ -67,13 +67,13 @@ static void test_journald_enable_disable(void** state)
         emlog_log(EML_LEVEL_INFO, "UT", "JOURNALD_ACTIVE");
         assert_int_equal(c.len, 0);
 
-        /* Disabling should restore the ability to capture via a custom
-         * writer (after re-installing it explicitly). */
+        /* Re-installing a custom writer should override journald and
+         * resume delivery to the capture helper. */
         c.len    = 0;
         c.buf[0] = '\0';
         emlog_set_writer(capture_writer, &c);
-        emlog_log(EML_LEVEL_INFO, "UT", "AFTER_DISABLE");
-        assert_non_null(strstr(c.buf, "AFTER_DISABLE"));
+        emlog_log(EML_LEVEL_INFO, "UT", "CUSTOM_AGAIN");
+        assert_non_null(strstr(c.buf, "CUSTOM_AGAIN"));
     }
     else
     {
@@ -88,37 +88,7 @@ static void test_journald_enable_disable(void** state)
     free(c.buf);
 }
 
-static void test_journald_disable_idempotent(void** state)
+void emlog_journald_enable_behavior(void** state)
 {
-    (void)state;
-    emlog_init(-1, false);
-
-    /* Enable (or attempt to enable) the journald writer and then disable
-     * it twice to ensure the helper is safe to call repeatedly. */
-    (void)emlog_enable_journald("double-disable");
-
-    struct capture c = {0};
-    c.cap            = 1024;
-    c.buf            = malloc(c.cap);
-    assert_non_null(c.buf);
-    c.len    = 0;
-    c.buf[0] = '\0';
-
-    emlog_set_writer(capture_writer, &c);
-    emlog_set_level(EML_LEVEL_INFO);
-    emlog_log(EML_LEVEL_INFO, "UT", "IDEMPOTENT_DISABLE");
-    assert_non_null(strstr(c.buf, "IDEMPOTENT_DISABLE"));
-
-    emlog_set_writer(NULL, NULL);
-    free(c.buf);
-}
-
-void emlog_journald_enable_disable(void** state)
-{
-    test_journald_enable_disable(state);
-}
-
-void emlog_journald_disable_idempotent(void** state)
-{
-    test_journald_disable_idempotent(state);
+    test_journald_enable_behavior(state);
 }
