@@ -110,6 +110,11 @@ typedef ssize_t (*eml_writer_fn)(eml_level_t lvl, const char* line, size_t n, vo
  * value of the EMLOG_LEVEL environment variable will be parsed and used
  * (accepted values: debug, info, warn, error, crit).
  *
+ * Calling emlog_init() multiple times is safe; each invocation replaces
+ * the previous configuration (the most recent call "wins"), which
+ * allows different subsystems to reconfigure the logger without
+ * tearing down internal state.
+ *
  * @param min_level Minimum level to emit (or negative to read EMLOG_LEVEL).
  * @param timestamps Enable ISO8601 timestamps when true.
  */
@@ -141,6 +146,39 @@ void emlog_enable_timestamps(bool on);
  * @param user User data pointer passed to the writer when invoked.
  */
 void emlog_set_writer(eml_writer_fn fn, void* user);
+
+/**
+ * @brief Check whether journald support was compiled in.
+ *
+ * The library only includes the journald writer when built with
+ * libsystemd headers and linked with libsystemd. Use this helper to
+ * guard optional journald-only code at runtime.
+ *
+ * @return true if the journald writer is available, false otherwise.
+ */
+bool emlog_has_journald(void);
+
+/**
+ * @brief Install a journald writer (Linux/systemd builds only).
+ *
+ * When available the logger will forward every formatted line directly
+ * to systemd-journald using sd_journal_send(). The @p identifier is
+ * copied (truncated to 63 bytes) and passed as SYSLOG_IDENTIFIER; pass
+ * NULL to use the default name "emlog".
+ *
+ * @param identifier Optional syslog identifier/tag.
+ * @return true when journald support is active, false if the feature is
+ *         unavailable at build time.
+ */
+bool emlog_enable_journald(const char* identifier);
+
+/**
+ * @brief Disable the journald writer and restore the default sink.
+ *
+ * Safe to call even if journald support is unavailable or was never
+ * enabled; the helper becomes a no-op in those cases.
+ */
+void emlog_disable_journald(void);
 
 /**
  * @brief Control whether the logger flushes stdio buffers before using writev.

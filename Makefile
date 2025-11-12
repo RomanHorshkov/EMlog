@@ -41,12 +41,29 @@ OBJS := $(patsubst %.c,$(OBJDIR)/%.o,$(SRCS))
 UNIT_TEST_SRC := tests/unit/unit_test_runner.c \
 				tests/unit/emlog_set_level.c \
 			tests/unit/test_emlog_init.c \
-			tests/unit/test_emlog_timestamps.c
+			tests/unit/test_emlog_timestamps.c \
+			tests/unit/test_emlog_journald.c
 UNIT_TEST_BIN := unit_test_emlog
 
 # try to discover cmocka via pkg-config; fall back to -lcmocka
 PKG_CMOCKA_CFLAGS := $(shell pkg-config --cflags cmocka 2>/dev/null || echo "")
 PKG_CMOCKA_LIBS  := $(shell pkg-config --libs cmocka 2>/dev/null || echo "-lcmocka")
+
+# systemd journald
+PKG_SYSTEMD_CFLAGS := $(shell pkg-config --cflags libsystemd 2>/dev/null || echo "")
+PKG_SYSTEMD_LIBS  := $(shell pkg-config --libs libsystemd 2>/dev/null || echo "")
+ifneq ($(strip $(PKG_SYSTEMD_CFLAGS)$(PKG_SYSTEMD_LIBS)),)
+CPPFLAGS += $(PKG_SYSTEMD_CFLAGS) -DEML_HAVE_JOURNALD=1
+SYSTEMD_LIBS := $(PKG_SYSTEMD_LIBS)
+else
+# allow help-like targets to run without libsystemd to surface guidance
+ifneq ($(filter help,$(MAKECMDGOALS)),)
+$(warning libsystemd not found via pkg-config; help target available but builds will fail until libsystemd-dev is installed)
+else
+# error, do not build without journald support
+$(error libsystemd not found via pkg-config; please install libsystemd-dev or equivalent)
+endif
+endif
 
 # stress harness (optional location)
 STRESS_SRC := $(firstword $(wildcard tests/stress.c src/stress.c app/src/stress.c))
@@ -62,12 +79,12 @@ CLANG_FORMAT := $(shell command -v clang-format 2>/dev/null)
 # IT-build/IT-run: build and run integration/stress harness
 # UT-build/UT-run: build and run unit tests
 
-IT-build: $(STRESS_BIN) ## Build integration (stress) binary
+IT-build: ## Build integration (stress) binary
 	@if [ -z "$(STRESS_SRC)" ]; then \
 		echo "[IT] no integration source found (create tests/stress.c or src/stress.c)"; exit 1; \
 	fi
 	@echo "[IT] building $(STRESS_BIN) from $(STRESS_SRC)"
-	$(CC) $(CFLAGS) $(CPPFLAGS) $(STRESS_SRC) -L. -lemlog -pthread -o $(STRESS_BIN)
+	$(MAKE) $(STRESS_BIN)
 
 IT-run: IT-build ## Run the integration test (stress harness)
 	@echo "[IT] running $(STRESS_BIN) with args: $${ARGS:-10 1000 0}"
@@ -77,7 +94,7 @@ IT-run-coverage: ## Run integration with coverage and write results to tests/res
 	@echo "[IT] running integration tests with coverage"
 	@mkdir -p tests/results
 	$(MAKE) CFLAGS="$(CFLAGS) -D_GNU_SOURCE --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h" LDFLAGS="$(LDFLAGS) --coverage" all
-	$(CC) $(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(HARDEN_CFLAGS) $(STRESS_SRC) -L. -lemlog -pthread $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(STRESS_BIN)
+	$(CC) $(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(HARDEN_CFLAGS) $(STRESS_SRC) -L. -lemlog -pthread $(SYSTEMD_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(STRESS_BIN)
 	./$(STRESS_BIN) $${ARGS:-10 1000 0}
 	if command -v gcovr >/dev/null 2>&1; then \
 		gcovr -r . --exclude 'tests/' --html --html-details -o tests/results/IT_coverage.html && \
@@ -109,11 +126,12 @@ UT-run: ## Build & run unit tests with coverage and write results to tests/resul
 	# rebuild library with coverage instrumentation
 	$(MAKE) CFLAGS="$(CFLAGS) --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h" LDFLAGS="$(LDFLAGS) --coverage" all
 	# compile unit test with coverage flags (force include of stddef/stdarg to satisfy cmocka)
-	$(CC) $(CFLAGS) -D_GNU_SOURCE --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread $(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(UNIT_TEST_BIN)
+	$(CC) $(CFLAGS) -D_GNU_SOURCE --coverage -O0 -g -include stddef.h -include stdarg.h -include setjmp.h $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread $(PKG_CMOCKA_LIBS) $(SYSTEMD_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) --coverage -o $(UNIT_TEST_BIN)
 	# run unit tests (generates .gcda)
 	./$(UNIT_TEST_BIN)
 	# collect coverage (suppress verbose tool output)
 	@bash -c 'if command -v gcovr >/dev/null 2>&1; then gcovr -r . --exclude "tests/" --html --html-details -o tests/results/UT_coverage.html > /dev/null 2>&1 && gcovr -r . --exclude "tests/" --xml -o tests/results/UT_coverage.xml > /dev/null 2>&1 && echo "[UT] coverage: tests/results/UT_coverage.html"; elif command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then lcov --capture --directory . --output-file tests/results/UT_coverage.info > /dev/null 2>&1 || true; lcov --remove tests/results/UT_coverage.info "/usr/*" "tests/*" --output-file tests/results/UT_coverage.info > /dev/null 2>&1 || true; genhtml tests/results/UT_coverage.info --output-directory tests/results/UT_coverage_html > /dev/null 2>&1 || true; echo "[UT] coverage: tests/results/UT_coverage_html/index.html"; else echo "[UT] coverage tools not found (gcovr or lcov/genhtml)"; fi'
+	@$(MAKE) clean >/dev/null 2>&1 || true
 # ---------------- Warnings & hardening ----------------
 CC_VERSION := $(shell $(CC) -dumpversion 2>/dev/null || echo 0)
 CC_ID      := $(shell $(CC) -dM -E - < /dev/null 2>/dev/null | grep -q __clang__ && echo clang || echo gcc)
@@ -175,12 +193,12 @@ $(OBJDIR)/%.o: %.c
 $(UNIT_TEST_BIN): $(UNIT_TEST_SRC) $(LIBNAME)
 	@echo "[unit-test] building $(UNIT_TEST_BIN)"
 	$(CC) -D_GNU_SOURCE -include stddef.h -include stdarg.h -include setjmp.h $(CFLAGS) $(CPPFLAGS) $(PKG_CMOCKA_CFLAGS) $(HARDEN_CFLAGS) $(UNIT_TEST_SRC) -L. -lemlog -pthread \
-		$(PKG_CMOCKA_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
+		$(PKG_CMOCKA_LIBS) $(SYSTEMD_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
 
 # stress binary
 $(STRESS_BIN): $(STRESS_SRC) $(LIBNAME)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(HARDEN_CFLAGS) $< -L. -lemlog -pthread \
-	    $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
+	    $(SYSTEMD_LIBS) $(HARDEN_LDFLAGS_BIN) $(LDFLAGS) -o $@
 
 ## coverage is produced as part of UT-run and IT-run; standalone target removed
 

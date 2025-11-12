@@ -118,6 +118,17 @@ threads=10 msgs=1000 elapsed=1.222275
 
 This means 10,000 messages were emitted in ~1.222s (≈8.2k messages/sec total).
 
+When libsystemd is available the harness automatically enables the
+journald writer with `SYSLOG_IDENTIFIER=emlog-stress`. After running
+`make IT-run` you can confirm emission via:
+
+```bash
+journalctl -t emlog-stress --since "1 minute ago"
+```
+
+If journald is unavailable the harness falls back to stdio and emits a
+diagnostic line indicating the active sink.
+
 Valgrind / Massif summary collected
 ---------------------------------
 
@@ -151,7 +162,7 @@ Basic usage (same as before):
 #include "emlog.h"
 
 int main(void) {
-    emlog_init(-1, true); // enable timestamps and initialize timezone once
+    emlog_init(-1, true); // safe to call multiple times; last call wins
     emlog_set_level(EML_LEVEL_DEBUG);
 
     EML_INFO("main", "hello world %d", 1);
@@ -169,6 +180,19 @@ ssize_t my_writer(eml_level_t lvl, const char* line, size_t n, void* user) {
 
 emlog_set_writer(my_writer, my_context);
 ```
+
+Journald (systemd) writer:
+
+```c
+if(emlog_has_journald()) {
+    /* Tag lines with SYSLOG_IDENTIFIER=homeserver */
+    emlog_enable_journald("homeserver");
+}
+```
+
+When libsystemd headers/libraries are present the Makefile enables this
+writer automatically; otherwise the helper returns false and the logger
+falls back to stdout/stderr.
 
 How to reproduce profiling runs used during development
 -----------------------------------------------------

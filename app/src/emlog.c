@@ -9,6 +9,10 @@
 #endif
 #include "emlog.h"
 
+#ifndef EML_HAVE_JOURNALD
+#    define EML_HAVE_JOURNALD 0
+#endif
+
 #include <errno.h>
 #include <limits.h>
 #include <pthread.h>
@@ -24,6 +28,13 @@
 #    include <sys/syscall.h>
 #endif
 
+#if EML_HAVE_JOURNALD
+#    include <syslog.h>
+#    include <systemd/sd-journal.h>
+#endif
+
+#define EML_JOURNAL_IDENT_MAX 63
+
 /* Global runtime state (protected by mutex) */
 static struct
 {
@@ -33,14 +44,20 @@ static struct
     eml_writer_fn   writer;       /**< Optional custom writer */
     void*           writer_ud;    /**< User data passed to writer */
     int             writev_flush; /**< Whether to fflush before writev */
-} G = {.min_level    = EML_LEVEL_INFO,
-       .use_ts       = 1,
-       .mu           = PTHREAD_MUTEX_INITIALIZER,
-       .writer       = NULL,
-       .writer_ud    = NULL,
+    unsigned        init_gen;     /**< Counts successful init calls */
+    int             initialized;  /**< Tracks whether init ran at least once */
+    char            journald_ident[EML_JOURNAL_IDENT_MAX + 1]; /**< Stored SYSLOG_IDENTIFIER */
+} G = {.min_level      = EML_LEVEL_INFO,
+       .use_ts         = 1,
+       .mu             = PTHREAD_MUTEX_INITIALIZER,
+       .writer         = NULL,
+       .writer_ud      = NULL,
        /* default: fastest path, do NOT fflush before writev. The
         * caller controls this via emlog_set_writev_flush(). */
-       .writev_flush = 0};
+       .writev_flush   = 0,
+       .init_gen       = 0,
+       .initialized    = 0,
+       .journald_ident = "emlog"};
 
 /* Maximum single write size we try to emit atomically. Prefer to use
  * the POSIX PIPE_BUF if available (writes <= PIPE_BUF to a pipe are
@@ -163,6 +180,14 @@ static void write_line(eml_level_t level, const char* line, size_t n);
  */
 static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap);
 
+#if EML_HAVE_JOURNALD
+/** @brief Map emlog levels to syslog priorities (journald writer). */
+static int journald_priority(eml_level_t lvl);
+
+/** @brief sd_journal_send()-backed writer. */
+static ssize_t journald_writer(eml_level_t lvl, const char* line, size_t n, void* user);
+#endif
+
 /* --------------------------------------------------------------------------
  * Public API implementations
  *
@@ -175,21 +200,24 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
 void emlog_init(int min_level, bool timestamps)
 {
     pthread_mutex_lock(&G.mu);
+    eml_level_t new_level;
     if(min_level < 0)
     {
         const char* env = getenv("EMLOG_LEVEL");
-        G.min_level     = parse_level(env);
+        new_level       = parse_level(env);
     }
     else
     {
-        G.min_level = (eml_level_t)min_level;
+        new_level = (eml_level_t)min_level;
     }
-    G.use_ts = timestamps ? 1 : 0;
-    /* Ensure timezone data is initialized once to avoid repeated tzfile
-     * reads and allocations when formatting timestamps (strftime with %z)
-     * on every log call. tzset() is idempotent and cheap when already
-     * initialized. */
-    if(G.use_ts) tzset();
+    int new_use_ts = timestamps ? 1 : 0;
+    int need_tz    = new_use_ts && (!G.initialized || !G.use_ts);
+
+    G.min_level = new_level;
+    G.use_ts    = new_use_ts;
+    if(need_tz) tzset();
+    G.initialized = 1;
+    ++G.init_gen;
     pthread_mutex_unlock(&G.mu);
 }
 
@@ -213,6 +241,33 @@ void emlog_set_writer(eml_writer_fn fn, void* user)
     G.writer    = fn;
     G.writer_ud = user;
     pthread_mutex_unlock(&G.mu);
+}
+
+bool emlog_has_journald(void)
+{
+#if EML_HAVE_JOURNALD
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool emlog_enable_journald(const char* identifier)
+{
+#if EML_HAVE_JOURNALD
+    pthread_mutex_lock(&G.mu);
+    const char* tag = (identifier && *identifier) ? identifier : "emlog";
+    size_t      len = strnlen(tag, EML_JOURNAL_IDENT_MAX);
+    memcpy(G.journald_ident, tag, len);
+    G.journald_ident[len] = '\0';
+    G.writer              = journald_writer;
+    G.writer_ud           = G.journald_ident;
+    pthread_mutex_unlock(&G.mu);
+    return true;
+#else
+    (void)identifier;
+    return false;
+#endif
 }
 
 void emlog_set_writev_flush(bool on)
@@ -330,6 +385,8 @@ const char* eml_err_name(eml_err_t e)
             return "EML_FATAL_CRYPTO";
         case EML_FATAL_BUG:
             return "EML_FATAL_BUG";
+        case EML__COUNT:
+            return "EML__COUNT";
         default:
             return "EML_UNKNOWN";
     }
@@ -355,6 +412,7 @@ int eml_err_to_exit(eml_err_t e)
         case EML_TEMP_RESOURCE:
             return EML_EXIT_MEM;
         case EML_FATAL_BUG:
+        case EML__COUNT:
             return EML_EXIT_BUG;
         default:
             return EML_EXIT_OK;
@@ -405,6 +463,22 @@ uint64_t eml_tid(void)
 #endif
 }
 
+static void copy_cached_ts(char* out, size_t n, unsigned ms)
+{
+    char buf[64];
+    int  w = snprintf(buf, sizeof buf, "%s.%03u%s", ts_cache_prefix_tls, ms, ts_cache_tz_tls);
+    if(!n) return;
+    if(w < 0)
+    {
+        out[0] = '\0';
+        return;
+    }
+    size_t copy = (size_t)w;
+    if(copy >= n) copy = n - 1;
+    memcpy(out, buf, copy);
+    out[copy] = '\0';
+}
+
 static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
 {
     /*
@@ -433,11 +507,7 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
      */
     if(sec == (__time_t)ts_cache_sec_tls)
     {
-        if(n)
-        {
-            int w = snprintf(out, n, "%s.%03u%s", ts_cache_prefix_tls, ms, ts_cache_tz_tls);
-            if(w < 0 && n) out[0] = '\0';
-        }
+        copy_cached_ts(out, n, ms);
         if(msec_out) *msec_out = ms;
         return;
     }
@@ -490,11 +560,7 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
         ts_cache_sec_tls = sec; /* publish updated cache for this thread */
     }
     /* Compose final string using thread-local cache. */
-    if(n)
-    {
-        int w = snprintf(out, n, "%s.%03u%s", ts_cache_prefix_tls, ms, ts_cache_tz_tls);
-        if(w < 0 && n) out[0] = '\0';
-    }
+    copy_cached_ts(out, n, ms);
     if(msec_out) *msec_out = ms;
 }
 
@@ -633,7 +699,7 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
      */
     if(G.writev_flush) fflush(out);
     /* prepare newline iovec */
-    const char   nl = '\n';
+    char         nl = '\n';
     struct iovec local_iov[16];
     int          cnt = 0;
     for(int i = 0; i < iovcnt && cnt < (int)(sizeof local_iov / sizeof local_iov[0]) - 1; ++i)
@@ -655,6 +721,26 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
     fflush(out);
 #endif
 }
+
+#if EML_HAVE_JOURNALD
+static int journald_priority(eml_level_t lvl)
+{
+    if(lvl < EML_LEVEL_DBG) lvl = EML_LEVEL_DBG;
+    if(lvl > EML_LEVEL_CRIT) lvl = EML_LEVEL_CRIT;
+    static const int map[] = {LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERR, LOG_CRIT};
+    return map[lvl];
+}
+
+static ssize_t journald_writer(eml_level_t lvl, const char* line, size_t n, void* user)
+{
+    const char* tag = (const char*)user;
+    if(!tag || !*tag) tag = "emlog";
+    int msg_len = (n > (size_t)INT_MAX) ? INT_MAX : (int)n;
+    int r = sd_journal_send("PRIORITY=%i", journald_priority(lvl), "SYSLOG_IDENTIFIER=%s", tag,
+                            "MESSAGE=%.*s", msg_len, line, NULL);
+    return (r < 0) ? (ssize_t)r : (ssize_t)n;
+}
+#endif
 
 static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap)
 {
