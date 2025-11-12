@@ -24,9 +24,13 @@ void emlog_init_explicit_dbg(void** state);
 void emlog_init_env_parsing(void** state);
 
 /* timestamp tests */
-void test_emlog_timestamps_true(void** state);
-void test_emlog_timestamps_false(void** state);
-void test_emlog_timestamps_toggle(void** state);
+void emlog_timestamps_true(void** state);
+void emlog_timestamps_false(void** state);
+void emlog_timestamps_toggle(void** state);
+
+/* journald writer tests */
+void emlog_journald_enable_disable(void** state);
+void emlog_journald_disable_idempotent(void** state);
 
 #ifdef __cplusplus
 }
