@@ -173,14 +173,6 @@ bool emlog_has_journald(void);
 bool emlog_enable_journald(const char* identifier);
 
 /**
- * @brief Disable the journald writer and restore the default sink.
- *
- * Safe to call even if journald support is unavailable or was never
- * enabled; the helper becomes a no-op in those cases.
- */
-void emlog_disable_journald(void);
-
-/**
  * @brief Control whether the logger flushes stdio buffers before using writev.
  *
  * When true (default) the logger will call fflush() on the destination
