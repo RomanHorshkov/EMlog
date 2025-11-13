@@ -13,13 +13,13 @@
  * global state (writer) on exit.
  */
 
-#include <cmocka.h>
 #include <ctype.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cmocka.h>
 
 #include "emlog.h"
 #include "unit_tests.h"
