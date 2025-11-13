@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+      - journal_**
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ninja-build cmake pkg-config libcmocka-dev
+
+      - name: Configure (CMake)
+        run: |
+          cmake -S . -B build \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+                -DEMLOG_BUILD_TESTS=ON
+
+      - name: Build
+        run: |
+          cmake --build build --target emlog_static emlog_shared emlog_unit_tests
+
+      - name: Run unit tests
+        run: |
+          ctest --test-dir build --output-on-failure

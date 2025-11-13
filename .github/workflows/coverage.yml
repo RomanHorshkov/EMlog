@@ -2,56 +2,40 @@ name: coverage
 
 on:
   push:
-    branches: [ master, smaller_updates ]
+    branches:
+      - master
   pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   coverage:
     runs-on: ubuntu-latest
-
+    env:
+      BUILD_DIR: build/coverage
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Install deps
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y lcov gcovr build-essential pkg-config jq
-        # install cmocka if not present
-        sudo apt-get install -y libcunit1-dev libcmocka-dev || true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ninja-build cmake pkg-config libcmocka-dev gcovr jq
 
-    - name: Build and run coverage
-      run: |
-        set -euo pipefail
-        make clean
-        # Use project's UT-run which builds instrumented binaries and writes coverage to tests/results
-        make UT-run
-        # Now produce a machine-readable JSON summary (gcovr) and also an XML report
-        if command -v gcovr >/dev/null 2>&1; then
-          gcovr -r . --xml -o tests/results/UT_coverage.xml >/dev/null 2>&1 || true
-          gcovr -r . --json-summary -o tests/results/coverage.json >/dev/null 2>&1 || true
-        else
-          # fallback: try lcov + genhtml; write a small JSON-summary shim
-          lcov --capture --directory . --output-file tests/results/UT_coverage.info >/dev/null 2>&1 || true
-          lcov --remove tests/results/UT_coverage.info '/usr/*' 'tests/*' --output-file tests/results/UT_coverage.info >/dev/null 2>&1 || true
-          genhtml tests/results/UT_coverage.info --output-directory tests/results/UT_coverage_html >/dev/null 2>&1 || true
-          # write a minimal JSON file indicating that coverage was generated (no percent available)
-          printf '{"metrics": {"covered_percent": -1}}' > tests/results/coverage.json || true
-        fi
-        # Attempt to extract coverage percent (if available) into a short text file
-        if [ -f tests/results/coverage.json ]; then
-          COVERAGE_PCT=$(jq -r '.metrics.covered_percent' tests/results/coverage.json 2>/dev/null || echo "-1")
-          printf "%s" "$${COVERAGE_PCT}" > tests/results/coverage-percent.txt
-        else
-          printf "-1" > tests/results/coverage-percent.txt
-        fi
+      - name: Generate coverage reports
+        run: |
+          set -euo pipefail
+          ./utils/gen_coverage.sh
 
-    - name: Upload coverage artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report
-        path: |
-          tests/results/UT_coverage.html
-          tests/results/UT_coverage.xml
-          tests/results/coverage.json
-          tests/results/coverage-percent.txt
-*** End Patch
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            tests/results/UT_coverage.html
+            tests/results/UT_coverage.xml
+            tests/results/coverage-summary.json
+            tests/results/coverage-percent.txt
