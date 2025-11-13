@@ -148,31 +148,6 @@ void emlog_enable_timestamps(bool on);
 void emlog_set_writer(eml_writer_fn fn, void* user);
 
 /**
- * @brief Check whether journald support was compiled in.
- *
- * The library only includes the journald writer when built with
- * libsystemd headers and linked with libsystemd. Use this helper to
- * guard optional journald-only code at runtime.
- *
- * @return true if the journald writer is available, false otherwise.
- */
-bool emlog_has_journald(void);
-
-/**
- * @brief Install a journald writer (Linux/systemd builds only).
- *
- * When available the logger will forward every formatted line directly
- * to systemd-journald using sd_journal_send(). The @p identifier is
- * copied (truncated to 63 bytes) and passed as SYSLOG_IDENTIFIER; pass
- * NULL to use the default name "emlog".
- *
- * @param identifier Optional syslog identifier/tag.
- * @return true when journald support is active, false if the feature is
- *         unavailable at build time.
- */
-bool emlog_enable_journald(const char* identifier);
-
-/**
  * @brief Control whether the logger flushes stdio buffers before using writev.
  *
  * When true (default) the logger will call fflush() on the destination
