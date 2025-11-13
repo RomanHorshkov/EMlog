@@ -43,10 +43,8 @@ int main(int argc, char** argv)
     if(argc >= 4) enable_ts = atoi(argv[3]);
 
     /* redirect stdout/stderr to /dev/null to avoid noise unless journald fails */
-    if(!freopen("/dev/null", "w", stdout))
-        perror("freopen stdout");
-    if(!freopen("/dev/null", "w", stderr))
-        perror("freopen stderr");
+    if(!freopen("/dev/null", "w", stdout)) perror("freopen stdout");
+    if(!freopen("/dev/null", "w", stderr)) perror("freopen stderr");
 
     emlog_init(-1, enable_ts);
     emlog_set_level(EML_LEVEL_DBG);
@@ -54,7 +52,7 @@ int main(int argc, char** argv)
     bool journald = false;
     if(emlog_has_journald())
     {
-        journald = emlog_enable_journald("emlog-stress");
+        journald           = emlog_enable_journald("emlog-stress");
         const char* status = journald ? "enabled" : "enable_failed";
         EML_INFO("STR", "journald sink %s (pid=%d)", status, (int)getpid());
     }
@@ -99,11 +97,8 @@ int main(int argc, char** argv)
     /* Also write the result to stdout (which the caller may have redirected to file)
      * but since we've redirected stdout to /dev/null, the primary record is the file.
      */
-    EML_INFO("STR", "stress finished threads=%d msgs=%d elapsed=%.6f sink=%s",
-             nthreads,
-             msgs,
-             elapsed,
-             journald ? "journald" : "stdio");
+    EML_INFO("STR", "stress finished threads=%d msgs=%d elapsed=%.6f sink=%s", nthreads, msgs,
+             elapsed, journald ? "journald" : "stdio");
 
     free(th);
     free(args);
