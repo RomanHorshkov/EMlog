@@ -3,7 +3,6 @@
 #endif
 
 #include <pthread.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,24 +41,13 @@ int main(int argc, char** argv)
     if(argc >= 3) msgs = atoi(argv[2]);
     if(argc >= 4) enable_ts = atoi(argv[3]);
 
-    /* redirect stdout/stderr to /dev/null to avoid noise unless journald fails */
+    /* redirect stdout/stderr to /dev/null to avoid spewing during stress runs */
     if(!freopen("/dev/null", "w", stdout)) perror("freopen stdout");
     if(!freopen("/dev/null", "w", stderr)) perror("freopen stderr");
 
     emlog_init(-1, enable_ts);
     emlog_set_level(EML_LEVEL_DBG);
-
-    bool journald = false;
-    if(emlog_has_journald())
-    {
-        journald           = emlog_enable_journald("emlog-stress");
-        const char* status = journald ? "enabled" : "enable_failed";
-        EML_INFO("STR", "journald sink %s (pid=%d)", status, (int)getpid());
-    }
-    else
-    {
-        EML_INFO("STR", "journald not available, falling back to stdio");
-    }
+    EML_INFO("STR", "stdout/stderr sink active (pid=%d)", (int)getpid());
 
     pthread_t*      th   = malloc(sizeof(pthread_t) * nthreads);
     struct thr_arg* args = malloc(sizeof(struct thr_arg) * nthreads);
@@ -97,8 +85,8 @@ int main(int argc, char** argv)
     /* Also write the result to stdout (which the caller may have redirected to file)
      * but since we've redirected stdout to /dev/null, the primary record is the file.
      */
-    EML_INFO("STR", "stress finished threads=%d msgs=%d elapsed=%.6f sink=%s", nthreads, msgs,
-             elapsed, journald ? "journald" : "stdio");
+    EML_INFO("STR", "stress finished threads=%d msgs=%d elapsed=%.6f sink=stdio", nthreads, msgs,
+             elapsed);
 
     free(th);
     free(args);

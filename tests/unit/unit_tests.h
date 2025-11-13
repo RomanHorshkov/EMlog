@@ -28,9 +28,6 @@ void emlog_timestamps_true(void** state);
 void emlog_timestamps_false(void** state);
 void emlog_timestamps_toggle(void** state);
 
-/* journald writer tests */
-void emlog_journald_enable_behavior(void** state);
-
 #ifdef __cplusplus
 }
 #endif

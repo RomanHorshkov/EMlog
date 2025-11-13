@@ -9,10 +9,6 @@
 #endif
 #include "emlog.h"
 
-#ifndef EML_HAVE_JOURNALD
-#    define EML_HAVE_JOURNALD 0
-#endif
-
 #include <errno.h>
 #include <limits.h>
 #include <pthread.h>
@@ -28,13 +24,6 @@
 #    include <sys/syscall.h>
 #endif
 
-#if EML_HAVE_JOURNALD
-#    include <syslog.h>
-#    include <systemd/sd-journal.h>
-#endif
-
-#define EML_JOURNAL_IDENT_MAX 63
-
 /* Global runtime state (protected by mutex) */
 static struct
 {
@@ -46,7 +35,6 @@ static struct
     int             writev_flush; /**< Whether to fflush before writev */
     unsigned        init_gen;     /**< Counts successful init calls */
     int             initialized;  /**< Tracks whether init ran at least once */
-    char            journald_ident[EML_JOURNAL_IDENT_MAX + 1]; /**< Stored SYSLOG_IDENTIFIER */
 } G = {.min_level      = EML_LEVEL_INFO,
        .use_ts         = 1,
        .mu             = PTHREAD_MUTEX_INITIALIZER,
@@ -56,14 +44,13 @@ static struct
         * caller controls this via emlog_set_writev_flush(). */
        .writev_flush   = 0,
        .init_gen       = 0,
-       .initialized    = 0,
-       .journald_ident = "emlog"};
+       .initialized    = 0};
 
 /* Maximum single write size we try to emit atomically. Prefer to use
  * the POSIX PIPE_BUF if available (writes <= PIPE_BUF to a pipe are
  * atomic). Fallback to 4096 if not defined. Keeping messages <= this
  * size reduces the risk of kernel-level splitting/interleaving when
- * stdout/stderr are pipes (e.g., captured by systemd/journald).
+ * stdout/stderr are pipes (e.g., captured by a supervisor).
  */
 #if defined(PIPE_BUF)
 #    define LOG_MAX_WRITE ((size_t)PIPE_BUF)
@@ -170,14 +157,6 @@ static eml_level_t parse_level(const char* s);
  */
 static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap);
 
-#if EML_HAVE_JOURNALD
-/** @brief Map emlog levels to syslog priorities (journald writer). */
-static int journald_priority(eml_level_t lvl);
-
-/** @brief sd_journal_send()-backed writer. */
-static ssize_t journald_writer(eml_level_t lvl, const char* line, size_t n, void* user);
-#endif
-
 /* --------------------------------------------------------------------------
  * Public API implementations
  *
@@ -231,33 +210,6 @@ void emlog_set_writer(eml_writer_fn fn, void* user)
     G.writer    = fn;
     G.writer_ud = user;
     pthread_mutex_unlock(&G.mu);
-}
-
-bool emlog_has_journald(void)
-{
-#if EML_HAVE_JOURNALD
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool emlog_enable_journald(const char* identifier)
-{
-#if EML_HAVE_JOURNALD
-    pthread_mutex_lock(&G.mu);
-    const char* tag = (identifier && *identifier) ? identifier : "emlog";
-    size_t      len = strnlen(tag, EML_JOURNAL_IDENT_MAX);
-    memcpy(G.journald_ident, tag, len);
-    G.journald_ident[len] = '\0';
-    G.writer              = journald_writer;
-    G.writer_ud           = G.journald_ident;
-    pthread_mutex_unlock(&G.mu);
-    return true;
-#else
-    (void)identifier;
-    return false;
-#endif
 }
 
 void emlog_set_writev_flush(bool on)
@@ -647,26 +599,6 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
     fflush(out);
 #endif
 }
-
-#if EML_HAVE_JOURNALD
-static int journald_priority(eml_level_t lvl)
-{
-    if(lvl < EML_LEVEL_DBG) lvl = EML_LEVEL_DBG;
-    if(lvl > EML_LEVEL_CRIT) lvl = EML_LEVEL_CRIT;
-    static const int map[] = {LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERR, LOG_CRIT};
-    return map[lvl];
-}
-
-static ssize_t journald_writer(eml_level_t lvl, const char* line, size_t n, void* user)
-{
-    const char* tag = (const char*)user;
-    if(!tag || !*tag) tag = "emlog";
-    int msg_len = (n > (size_t)INT_MAX) ? INT_MAX : (int)n;
-    int r = sd_journal_send("PRIORITY=%i", journald_priority(lvl), "SYSLOG_IDENTIFIER=%s", tag,
-                            "MESSAGE=%.*s", msg_len, line, NULL);
-    return (r < 0) ? (ssize_t)r : (ssize_t)n;
-}
-#endif
 
 static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap)
 {
