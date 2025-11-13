@@ -159,16 +159,6 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out);
  */
 static eml_level_t parse_level(const char* s);
 
-/** @brief Low-level writer that emits a single line (no trailing \n expected).
- * 
- * Writes the line using the custom writer if set, else to stdout/stderr
- * 
- * @param level Log level
- * @param line Pointer to line data (not NUL-terminated necessarily)
- * @param n Length of line
- */
-static void write_line(eml_level_t level, const char* line, size_t n);
-
 /** @brief Core varargs logger implementation (expects mutex to be held).
  * 
  * Formats and emits a log line if the level is >= current min_level.
@@ -573,70 +563,6 @@ static eml_level_t parse_level(const char* s)
     if(!strcasecmp(s, "error")) return EML_LEVEL_ERROR;
     if(!strcasecmp(s, "crit") || !strcasecmp(s, "fatal")) return EML_LEVEL_CRIT;
     return EML_LEVEL_INFO;
-}
-
-static void write_line(eml_level_t level, const char* line, size_t n) __attribute__((unused));
-static void write_line(eml_level_t level, const char* line, size_t n)
-{
-    /*
-     * -----------------------------------------------------------------
-     * write_line
-     * -----------------------------------------------------------------
-     *
-     * Purpose:
-     *   The write_line function is the final sink for a fully formatted
-     *   log line. It intentionally keeps behavior minimal: if a custom
-     *   writer is installed via emlog_set_writer(), we delegate to that
-     *   writer. Otherwise we fall back to writing to a FILE* (stdout or
-     *   stderr) determined by the log level.
-     *
-     * Design considerations & rationale (we leave these as an exhaustive
-     * checklist for anyone reading the code in the future):
-     *  - Custom writer callback: allows embedding programs to capture
-     *    log output without redirecting stdio. The callback signature is
-     *    deliberately simple: level, pointer+length and user data.
-     *  - Avoid additional locking here: the public API (emlog_log)
-     *    serializes via G.mu before calling vlog, and write_line only
-     *    observes global writer pointer. Writers themselves must be
-     *    thread-safe or the user must ensure single-threadedness.
-     *  - Use fwrite + fputc + fflush to flush lines immediately. This
-     *    may be slightly less efficient than buffered batched writes but
-     *    keeps the behavior predictable for CLI tools and tests.
-     *  - We intentionally don't NUL-terminate or reformat the buffer
-     *    here — caller provides length and we respect it.
-     *  - This function deliberately does not allocate memory.
-     *
-     * Edge cases and error handling:
-     *  - The custom writer's return value is ignored to keep the API
-     *    simple. If you need guaranteed persistence, implement a writer
-     *    that retries or returns an error through other channels.
-     *  - fwrite/fputc failures are not handled explicitly: these will
-     *    set errno but the logger does not attempt retries. Logging
-     *    should not interfere with program control flow.
-     *
-     * Implementation notes (step-by-step):
-     *  1. If G.writer is set: call it with (level, line, n, G.writer_ud)
-     *     and return immediately — custom writer takes full control.
-     *  2. Otherwise: map level->FILE* using default_stream(level).
-     *  3. Use fwrite to write the raw bytes, then write a single \n
-     *     character with fputc and call fflush to ensure the line is
-     *     visible to observers immediately.
-     *
-     * Future considerations:
-     *  - If performance of many small log lines matters, consider a
-     *    buffering writer that batches and writes in the background.
-     *  - If atomicity across processes is needed, write to a pipe or
-     *    file descriptor with write(2) and obtain O_APPEND semantics.
-     */
-    if(G.writer)
-    {
-        (void)G.writer(level, line, n, G.writer_ud);
-        return;
-    }
-    FILE* out = default_stream(level);
-    (void)fwrite(line, 1, n, out);
-    fputc('\n', out);
-    fflush(out);
 }
 
 /*
