@@ -2,10 +2,10 @@
  * Unit tests for emlog_init
  */
 
-#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <cmocka.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -117,4 +117,66 @@ void emlog_init_explicit_dbg(void** state)
 void emlog_init_env_parsing(void** state)
 {
     test_init_env_parsing(state);
+}
+
+static void assert_env_level_behavior(const char* env_value, eml_level_t allowed,
+                                      int blocked, const char* tag)
+{
+    if(env_value)
+        setenv("EMLOG_LEVEL", env_value, 1);
+    else
+        unsetenv("EMLOG_LEVEL");
+
+    struct capture c = {0};
+    c.cap            = 1024;
+    c.buf            = malloc(c.cap);
+    assert_non_null(c.buf);
+    c.len    = 0;
+    c.buf[0] = '\0';
+
+    emlog_set_writer(capture_writer, &c);
+    emlog_init(-1, false);
+
+    if(blocked >= 0)
+    {
+        emlog_log((eml_level_t)blocked, "ENV", "BLOCK_%s", tag);
+        assert_null(strstr(c.buf, "BLOCK"));
+    }
+
+    emlog_log(allowed, "ENV", "ALLOW_%s", tag);
+    assert_non_null(strstr(c.buf, "ALLOW"));
+
+    emlog_set_writer(NULL, NULL);
+    free(c.buf);
+}
+
+static void test_init_env_variants(void** state)
+{
+    (void)state;
+    struct
+    {
+        const char* value;
+        eml_level_t allowed;
+        int         blocked;
+        const char* tag;
+    } cases[] = {
+        {"debug", EML_LEVEL_DBG, -1, "debug"},
+        {"INFO", EML_LEVEL_INFO, EML_LEVEL_DBG, "info"},
+        {"warn", EML_LEVEL_WARN, EML_LEVEL_INFO, "warn"},
+        {"warning", EML_LEVEL_WARN, EML_LEVEL_INFO, "warning"},
+        {"error", EML_LEVEL_ERROR, EML_LEVEL_WARN, "error"},
+        {"fatal", EML_LEVEL_CRIT, EML_LEVEL_ERROR, "fatal"},
+        {"crit", EML_LEVEL_CRIT, EML_LEVEL_ERROR, "crit"},
+        {"unexpected", EML_LEVEL_INFO, EML_LEVEL_DBG, "default"},
+    };
+
+    for(size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        assert_env_level_behavior(cases[i].value, cases[i].allowed, cases[i].blocked, cases[i].tag);
+    }
+}
+
+void emlog_init_env_variants(void** state)
+{
+    test_init_env_variants(state);
 }
