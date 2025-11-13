@@ -29,7 +29,7 @@ ctest --test-dir "${BUILD_DIR}" -R emlog_unit -V
 mkdir -p "${RESULT_DIR}"
 
 if command -v gcovr >/dev/null 2>&1; then
-    printf '[coverage] generating HTML via gcovr...\n'
+    printf '[coverage] generating reports via gcovr...\n'
     gcovr -r "${REPO_ROOT}" \
           --object-directory "${BUILD_DIR}" \
           --exclude 'tests/' \
@@ -40,6 +40,11 @@ if command -v gcovr >/dev/null 2>&1; then
           --exclude 'tests/' \
           --xml \
           -o "${RESULT_DIR}/UT_coverage.xml"
+    gcovr -r "${REPO_ROOT}" \
+          --object-directory "${BUILD_DIR}" \
+          --exclude 'tests/' \
+          --json-summary \
+          -o "${RESULT_DIR}/coverage-summary.json"
     printf '[coverage] report ready: %s/UT_coverage.html\n' "${RESULT_DIR}"
 elif command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then
     printf '[coverage] generating HTML via lcov/genhtml...\n'
@@ -48,7 +53,19 @@ elif command -v lcov >/dev/null 2>&1 && command -v genhtml >/dev/null 2>&1; then
     lcov --remove "${INFO_FILE}" '/usr/*' 'tests/*' --output-file "${INFO_FILE}"
     genhtml "${INFO_FILE}" --output-directory "${RESULT_DIR}/UT_coverage_html"
     printf '[coverage] report ready: %s/UT_coverage_html/index.html\n' "${RESULT_DIR}"
+    cat <<'JSON' > "${RESULT_DIR}/coverage-summary.json"
+{"line_percent": -1, "message": "lcov run - JSON summary unavailable"}
+JSON
 else
     echo "[coverage] gcovr or lcov/genhtml not found. Please install one of them."
     exit 1
 fi
+
+if command -v jq >/dev/null 2>&1 && [ -f "${RESULT_DIR}/coverage-summary.json" ]; then
+    COVERAGE_PCT=$(jq -r '.line_percent // .metrics.covered_percent // -1' "${RESULT_DIR}/coverage-summary.json")
+else
+    COVERAGE_PCT=-1
+fi
+
+printf '%s\n' "${COVERAGE_PCT}" > "${RESULT_DIR}/coverage-percent.txt"
+printf '[coverage] overall line coverage: %s%%\n' "${COVERAGE_PCT}"
