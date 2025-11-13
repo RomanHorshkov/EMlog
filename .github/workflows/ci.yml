@@ -36,7 +36,7 @@ jobs:
 
       - name: Build
         run: |
-          cmake --build build --target emlog_static emlog_shared emlog_unit_tests
+          cmake --build build --target emlog_static emlog_shared emlog_unit_tests emlog_integration_test
 
       - name: Run unit tests
         run: |
