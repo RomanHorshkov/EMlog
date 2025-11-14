@@ -24,6 +24,8 @@
 #    include <sys/syscall.h>
 #endif
 
+#define LOG_TAG "emlog"
+
 /* Global runtime state (protected by mutex) */
 static struct
 {
@@ -188,6 +190,11 @@ void emlog_init(int min_level, bool timestamps)
     G.initialized = 1;
     ++G.init_gen;
     pthread_mutex_unlock(&G.mu);
+    EML_INFO(
+        LOG_TAG,
+        "Initialized emlog (level=%s, timestamps=%s)",
+        lvl_str(new_level),
+        new_use_ts ? "enabled" : "disabled");
 }
 
 void emlog_set_level(eml_level_t min_level)
