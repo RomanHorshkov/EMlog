@@ -2,10 +2,10 @@
  * Single runner that aggregates all unit tests for emlog
  */
 
+#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <cmocka.h>
 #include "unit_tests.h"
 
 /* declare external test functions from other unit files */

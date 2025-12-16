@@ -2,10 +2,10 @@
  * Unit tests for emlog_init
  */
 
+#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <cmocka.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -119,8 +119,8 @@ void emlog_init_env_parsing(void** state)
     test_init_env_parsing(state);
 }
 
-static void assert_env_level_behavior(const char* env_value, eml_level_t allowed,
-                                      int blocked, const char* tag)
+static void assert_env_level_behavior(const char* env_value, eml_level_t allowed, int blocked,
+                                      const char* tag)
 {
     if(env_value)
         setenv("EMLOG_LEVEL", env_value, 1);

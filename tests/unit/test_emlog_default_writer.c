@@ -2,14 +2,14 @@
  * Covers default writev path (stdout/stderr) and flush toggle.
  */
 
+#include <cmocka.h>
 #include <fcntl.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
-#include <unistd.h>
-#include <cmocka.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "emlog.h"
 #include "unit_tests.h"
@@ -46,8 +46,8 @@ static void restore_fd(int fd, int saved)
     close(saved);
 }
 
-static void assert_default_route(eml_level_t level, const char* comp, const char* msg,
-                                 int fd, FILE* stream)
+static void assert_default_route(eml_level_t level, const char* comp, const char* msg, int fd,
+                                 FILE* stream)
 {
     int pipefd[2];
     int saved_fd = -1;
@@ -61,7 +61,7 @@ static void assert_default_route(eml_level_t level, const char* comp, const char
     fflush(stream);
     restore_fd(fd, saved_fd);
 
-    char buf[512];
+    char    buf[512];
     ssize_t n = read_all(pipefd[0], buf, sizeof buf);
     close(pipefd[0]);
     assert_true(n > 0);

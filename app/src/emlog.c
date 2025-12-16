@@ -37,16 +37,16 @@ static struct
     int             writev_flush; /**< Whether to fflush before writev */
     unsigned        init_gen;     /**< Counts successful init calls */
     int             initialized;  /**< Tracks whether init ran at least once */
-} G = {.min_level      = EML_LEVEL_INFO,
-       .use_ts         = 1,
-       .mu             = PTHREAD_MUTEX_INITIALIZER,
-       .writer         = NULL,
-       .writer_ud      = NULL,
+} G = {.min_level    = EML_LEVEL_INFO,
+       .use_ts       = 1,
+       .mu           = PTHREAD_MUTEX_INITIALIZER,
+       .writer       = NULL,
+       .writer_ud    = NULL,
        /* default: fastest path, do NOT fflush before writev. The
         * caller controls this via emlog_set_writev_flush(). */
-       .writev_flush   = 0,
-       .init_gen       = 0,
-       .initialized    = 0};
+       .writev_flush = 0,
+       .init_gen     = 0,
+       .initialized  = 0};
 
 /* Maximum single write size we try to emit atomically. Prefer to use
  * the POSIX PIPE_BUF if available (writes <= PIPE_BUF to a pipe are
@@ -190,11 +190,8 @@ void emlog_init(int min_level, bool timestamps)
     G.initialized = 1;
     ++G.init_gen;
     pthread_mutex_unlock(&G.mu);
-    EML_INFO(
-        LOG_TAG,
-        "Initialized emlog (level=%s, timestamps=%s)",
-        lvl_str(new_level),
-        new_use_ts ? "enabled" : "disabled");
+    EML_INFO(LOG_TAG, "Initialized emlog (level=%s, timestamps=%s)", lvl_str(new_level),
+             new_use_ts ? "enabled" : "disabled");
 }
 
 void emlog_set_level(eml_level_t min_level)
