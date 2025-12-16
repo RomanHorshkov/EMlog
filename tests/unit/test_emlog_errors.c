@@ -2,11 +2,11 @@
  * Exercises error-conversion helpers and emlog_log_errno().
  */
 
+#include <cmocka.h>
 #include <errno.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <cmocka.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -79,17 +79,22 @@ static void test_eml_err_name_strings(void** state)
     (void)state;
     struct
     {
-        eml_err_t    err;
-        const char*  name;
+        eml_err_t   err;
+        const char* name;
     } cases[] = {
-        {EML_OK, "EML_OK"},                 {EML_TRY_AGAIN, "EML_TRY_AGAIN"},
+        {EML_OK, "EML_OK"},
+        {EML_TRY_AGAIN, "EML_TRY_AGAIN"},
         {EML_TEMP_RESOURCE, "EML_TEMP_RESOURCE"},
         {EML_TEMP_UNAVAILABLE, "EML_TEMP_UNAVAILABLE"},
-        {EML_BAD_INPUT, "EML_BAD_INPUT"},   {EML_NOT_FOUND, "EML_NOT_FOUND"},
-        {EML_PERM, "EML_PERM"},             {EML_CONFLICT, "EML_CONFLICT"},
-        {EML_FATAL_CONF, "EML_FATAL_CONF"}, {EML_FATAL_IO, "EML_FATAL_IO"},
+        {EML_BAD_INPUT, "EML_BAD_INPUT"},
+        {EML_NOT_FOUND, "EML_NOT_FOUND"},
+        {EML_PERM, "EML_PERM"},
+        {EML_CONFLICT, "EML_CONFLICT"},
+        {EML_FATAL_CONF, "EML_FATAL_CONF"},
+        {EML_FATAL_IO, "EML_FATAL_IO"},
         {EML_FATAL_CRYPTO, "EML_FATAL_CRYPTO"},
-        {EML_FATAL_BUG, "EML_FATAL_BUG"},   {EML__COUNT, "EML__COUNT"},
+        {EML_FATAL_BUG, "EML_FATAL_BUG"},
+        {EML__COUNT, "EML__COUNT"},
     };
 
     for(size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
