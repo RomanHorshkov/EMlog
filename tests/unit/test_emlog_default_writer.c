@@ -2,7 +2,6 @@
  * Covers default writev path (stdout/stderr) and flush toggle.
  */
 
-#include <cmocka.h>
 #include <fcntl.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -10,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <cmocka.h>
 
 #include "emlog.h"
 #include "unit_tests.h"

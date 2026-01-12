@@ -2,13 +2,13 @@
  * Exercises error-conversion helpers and emlog_log_errno().
  */
 
-#include <cmocka.h>
 #include <errno.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cmocka.h>
 
 #include "emlog.h"
 #include "unit_tests.h"
