@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/uio.h>
@@ -24,14 +25,12 @@
 #    include <sys/syscall.h>
 #endif
 
-#define LOG_TAG "emlog"
-
 /* Global runtime state (protected by mutex) */
 static struct
 {
     eml_level_t     min_level;    /**< Minimum level to emit */
     int             use_ts;       /**< Whether timestamps are enabled */
-    pthread_mutex_t mu;           /**< Mutex protecting the struct */
+    pthread_mutex_t mutex;        /**< Mutex protecting the struct */
     eml_writer_fn   writer;       /**< Optional custom writer */
     void*           writer_ud;    /**< User data passed to writer */
     int             writev_flush; /**< Whether to fflush before writev */
@@ -39,7 +38,7 @@ static struct
     int             initialized;  /**< Tracks whether init ran at least once */
 } G = {.min_level    = EML_LEVEL_INFO,
        .use_ts       = 1,
-       .mu           = PTHREAD_MUTEX_INITIALIZER,
+       .mutex        = PTHREAD_MUTEX_INITIALIZER,
        .writer       = NULL,
        .writer_ud    = NULL,
        /* default: fastest path, do NOT fflush before writev. The
@@ -120,6 +119,18 @@ EML_THREAD_LOCAL static char   ts_cache_tz_tls[8]      = "+00:00";
  */
 static const char* lvl_str(eml_level_t l);
 
+/**
+ * @brief Return a numeric thread identifier suitable for logging.
+ *
+ * On Linux this returns the kernel thread id via syscall(SYS_gettid).
+ * On other platforms it converts the pthread_t value to a 64-bit value.
+ * The value is intended for human-readable logs, not for strict
+ * comparisons across processes.
+ *
+ * @return uint64_t Numeric thread identifier.
+ */
+static uint64_t eml_tid(void);
+
 /** @brief Choose default FILE stream for a level (stdout/stderr).
  * 
  * Logs at DBG/INF go to stdout, others to stderr.
@@ -170,7 +181,7 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
 
 void emlog_init(int min_level, bool timestamps)
 {
-    pthread_mutex_lock(&G.mu);
+    pthread_mutex_lock(&G.mutex);
     eml_level_t new_level;
     if(min_level < 0)
     {
@@ -189,48 +200,48 @@ void emlog_init(int min_level, bool timestamps)
     if(need_tz) tzset();
     G.initialized = 1;
     ++G.init_gen;
-    pthread_mutex_unlock(&G.mu);
-    EML_INFO(LOG_TAG, "Initialized emlog (level=%s, timestamps=%s)", lvl_str(new_level),
+    pthread_mutex_unlock(&G.mutex);
+    EML_INFO("emlog", "Initialized emlog (level=%s, timestamps=%s)", lvl_str(new_level),
              new_use_ts ? "enabled" : "disabled");
 }
 
 void emlog_set_level(eml_level_t min_level)
 {
-    pthread_mutex_lock(&G.mu);
+    pthread_mutex_lock(&G.mutex);
     G.min_level = min_level;
-    pthread_mutex_unlock(&G.mu);
+    pthread_mutex_unlock(&G.mutex);
 }
 
 void emlog_enable_timestamps(bool on)
 {
-    pthread_mutex_lock(&G.mu);
+    pthread_mutex_lock(&G.mutex);
     G.use_ts = on ? 1 : 0;
-    pthread_mutex_unlock(&G.mu);
+    pthread_mutex_unlock(&G.mutex);
 }
 
 void emlog_set_writer(eml_writer_fn fn, void* user)
 {
-    pthread_mutex_lock(&G.mu);
+    pthread_mutex_lock(&G.mutex);
     G.writer    = fn;
     G.writer_ud = user;
-    pthread_mutex_unlock(&G.mu);
+    pthread_mutex_unlock(&G.mutex);
 }
 
 void emlog_set_writev_flush(bool on)
 {
-    pthread_mutex_lock(&G.mu);
+    pthread_mutex_lock(&G.mutex);
     G.writev_flush = on ? 1 : 0;
-    pthread_mutex_unlock(&G.mu);
+    pthread_mutex_unlock(&G.mutex);
 }
 
 void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
 {
-    pthread_mutex_lock(&G.mu);
+    pthread_mutex_lock(&G.mutex);
     va_list ap;
     va_start(ap, fmt);
     vlog(level, comp, fmt, ap);
     va_end(ap);
-    pthread_mutex_unlock(&G.mu);
+    pthread_mutex_unlock(&G.mutex);
 }
 
 void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* fmt, ...)
@@ -396,7 +407,7 @@ static FILE* default_stream(eml_level_t l)
     return (l <= EML_LEVEL_INFO) ? stdout : stderr;
 }
 
-uint64_t eml_tid(void)
+static uint64_t eml_tid(void)
 {
 #if defined(__linux__)
 #    if defined(SYS_gettid)
@@ -612,7 +623,7 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
      * -----------------------------------------------------------------
      *
      * This function is the heart of the logging pipeline. It is invoked
-     * with the global mutex held (emlog_log acquires G.mu before calling
+     * with the global mutex held (emlog_log acquires G.mutex before calling
      * into here), so the implementation can safely read and write global
      * state without additional synchronization. The function is
      * carefully designed to avoid heap allocations for common short
