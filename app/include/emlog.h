@@ -18,10 +18,8 @@
 #ifndef EMLOG_H
 #define EMLOG_H
 
-#include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <sys/types.h>
 
 #ifdef __cplusplus
@@ -240,18 +238,6 @@ const char* eml_err_name(eml_err_t e);
  * @return int Suggested exit code.
  */
 int eml_err_to_exit(eml_err_t e);
-
-/**
- * @brief Return a numeric thread identifier suitable for logging.
- *
- * On Linux this returns the kernel thread id via syscall(SYS_gettid).
- * On other platforms it converts the pthread_t value to a 64-bit value.
- * The value is intended for human-readable logs, not for strict
- * comparisons across processes.
- *
- * @return uint64_t Numeric thread identifier.
- */
-uint64_t eml_tid(void);
 
 #ifdef __cplusplus
 }
