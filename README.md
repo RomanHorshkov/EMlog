@@ -3,7 +3,7 @@ EMLog — Minimal thread-safe logging and canonical error utilities
 
 [![CI](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml)
 [![Coverage Workflow](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml)
-![license](https://img.shields.io/badge/license-MIT-informational)]
+![license](https://img.shields.io/badge/license-MIT-informational)
 
 Overview
 --------
@@ -15,79 +15,29 @@ This repository contains the original library plus a set of targeted performance
 Files
 -----
 
-- `app/include/emlog.h` — Public API and documentation (Doxygen comments).
-- `app/src/emlog.c`     — Implementation and performance-focused changes (timestamp caching, writev emission, truncation, etc.).
+- `app/emlog.h` — Public API and documentation (Doxygen comments).
+- `app/emlog.c` — Implementation (timestamp caching, writev emission, truncation, etc.).
+- `VERSION` — Library version (`MAJOR.MINOR.PATCH`).
 - `tests/unit/*.c`      — cmocka-based unit tests that back the GitHub Actions suites.
 - `tests/integration/`  — Multithreaded / integration harnesses (formerly `stress.c`).
-- `utils/*.sh`          — Convenience wrappers around the common CMake flows (build libs, build tests, coverage).
-- `CmakeFiles`            — Legacy build still available for downstreams that rely on it.
+- `utils/*.sh`          — Helper scripts (tests/coverage or legacy CMake flows, depending on branch/work-in-progress).
 
 Building
 --------
-Building now shall be quite more clear and understandable!
-
-MANUAL STEPS:
-- create a build folder in the root project
-mkdir -p build
-
-compile the library
---------
-Conferma inoltro naspi e li' ci saranno tutti i dati.
-PROTOCOLLO O DOMUS DELLA DOMANDA.
-
-simple compilation
-gcc -std=c11 -c -I app/ app/emlog.c -o build/emlog.o
-
-optimized compilation
-gcc -std=c11 -c -O2 -I app/ app/emlog.c -o build/emlog.o
-
-debugging compilation
-gcc -std=c11 -c -g -I app/ app/emlog.c -o build/emlog.o
-
-library compilation (this is used later with .so creation steps).
-gcc -std=c11 -fPIC -c -O2 -I app/ app/emlog.c -o build/emlog.o
-
-Then build the remaining libraries
-gcc -shared -Wl,-soname,libemlog.so.1 -o build/libemlog.so.1.0.0 build/emlog.o
-
-and link the linker desired files to the .so.1.... whatever:
-ln -sf libemlog.so.1.0.0 build/libemlog.so.1
-ln -sf libemlog.so.1.0.0 build/libemlog.so
-
-and get to a point where one has:
-- Real file: build/libemlog.so.1.0.0
-- SONAME inside it: libemlog.so.1 (I checked with readelf)
-- Symlinks: build/libemlog.so.1 and build/libemlog.so
-
-Build problem
--------
-This is way too manual. The VERSION file have been created and the build needs to read that and produce the relative code.
-
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEMLOG_BUILD_TESTS=ON
-cmake --build build --target emlog_static emlog_shared
-```
-
-Helper scripts under `utils/` wrap the common flows:
+Everything you need to build/run is in `utils/`.
 
 | Script | Purpose |
 | ------ | ------- |
-| `utils/build_libs.sh` | Configure (Debug by default) and build `libemlog.a` + `libemlog.so`. |
-| `utils/build_tests.sh` | Configure with tests enabled and build the unit + integration binaries. |
+| `utils/make_libs.sh` | Build `libemlog.so.<VERSION>` and `libemlog.a` into `build/` (reads `VERSION`). |
+| `utils/build_tests.sh` | Build unit + integration tests (CMake/CTest). |
+| `utils/run_tests.sh` | Run tests (CTest). |
+| `utils/gen_coverage.sh` | Generate coverage report. |
+| `utils/make_deb.sh` | Build a Debian package (if you use it). |
 
-The legacy Makefile is still available for compatibility, but all GitHub Actions
-jobs and documentation examples rely on the CMake flow above.
+Note: `utils/make_libs.sh` currently assumes the repo lives at `$HOME/Projects/EMlog` (see `ROOT_DIR` inside the script).
 
 Running tests
 -------------
-
-```bash
-cmake --build build --target emlog_unit_tests
-ctest --test-dir build --output-on-failure
-```
-
-or simply:
 
 ```bash
 ./utils/run_tests.sh
