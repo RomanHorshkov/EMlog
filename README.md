@@ -3,7 +3,7 @@ EMLog — Minimal thread-safe logging and canonical error utilities
 
 [![CI](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml)
 [![Coverage Workflow](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml)
-![license](https://img.shields.io/badge/license-MIT-informational)
+![license](https://img.shields.io/badge/license-MIT-informational)]
 
 Overview
 --------
@@ -20,13 +20,49 @@ Files
 - `tests/unit/*.c`      — cmocka-based unit tests that back the GitHub Actions suites.
 - `tests/integration/`  — Multithreaded / integration harnesses (formerly `stress.c`).
 - `utils/*.sh`          — Convenience wrappers around the common CMake flows (build libs, build tests, coverage).
-- `Makefile`            — Legacy build still available for downstreams that rely on it.
+- `CmakeFiles`            — Legacy build still available for downstreams that rely on it.
 
 Building
 --------
+Building now shall be quite more clear and understandable!
 
-The repository now ships with a first-class CMake build that drives both the
-static/shared libraries and the test targets:
+MANUAL STEPS:
+- create a build folder in the root project
+mkdir -p build
+
+compile the library
+--------
+Conferma inoltro naspi e li' ci saranno tutti i dati.
+PROTOCOLLO O DOMUS DELLA DOMANDA.
+
+simple compilation
+gcc -std=c11 -c -I app/ app/emlog.c -o build/emlog.o
+
+optimized compilation
+gcc -std=c11 -c -O2 -I app/ app/emlog.c -o build/emlog.o
+
+debugging compilation
+gcc -std=c11 -c -g -I app/ app/emlog.c -o build/emlog.o
+
+library compilation (this is used later with .so creation steps).
+gcc -std=c11 -fPIC -c -O2 -I app/ app/emlog.c -o build/emlog.o
+
+Then build the remaining libraries
+gcc -shared -Wl,-soname,libemlog.so.1 -o build/libemlog.so.1.0.0 build/emlog.o
+
+and link the linker desired files to the .so.1.... whatever:
+ln -sf libemlog.so.1.0.0 build/libemlog.so.1
+ln -sf libemlog.so.1.0.0 build/libemlog.so
+
+and get to a point where one has:
+- Real file: build/libemlog.so.1.0.0
+- SONAME inside it: libemlog.so.1 (I checked with readelf)
+- Symlinks: build/libemlog.so.1 and build/libemlog.so
+
+Build problem
+-------
+This is way too manual. The VERSION file have been created and the build needs to read that and produce the relative code.
+
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DEMLOG_BUILD_TESTS=ON
