@@ -68,6 +68,7 @@ gcc "${CFLAGS[@]}"       -c app/emlog.c -o build/emlog.o
 
 # Create the shared .so library with the pic.o object file
 gcc -shared -Wl,-soname,libemlog.so.$MAJOR -o build/libemlog.so.$VER build/emlog.pic.o
+
 # Create the static .a library with the .o object file
 ar rcs build/libemlog.a build/emlog.o
 
@@ -80,4 +81,3 @@ echo "compiled libraries for $ROOT_DIR project into $(pwd)"
 
 # Remove useless files
 #rm build/*.o
-

@@ -431,9 +431,9 @@ int eml_err_to_exit(eml_err_t e)
  ****************************************************************************
  */
 
-static const char* _level_to_string(eml_level_t l)
+static const char* _level_to_string(eml_level_t level)
 {
-    switch(l)
+    switch(level)
     {
         case EML_LEVEL_DBG:
             return "DBG";
