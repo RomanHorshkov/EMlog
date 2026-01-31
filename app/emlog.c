@@ -25,27 +25,10 @@
 #    include <sys/syscall.h>
 #endif
 
-/* Global runtime state (protected by mutex) */
-static struct
-{
-    eml_level_t     min_level;    /**< Minimum level to emit */
-    int             use_ts;       /**< Whether timestamps are enabled */
-    pthread_mutex_t mutex;        /**< Mutex protecting the struct */
-    eml_writer_fn   writer;       /**< Optional custom writer */
-    void*           writer_ud;    /**< User data passed to writer */
-    int             writev_flush; /**< Whether to fflush before writev */
-    unsigned        init_gen;     /**< Counts successful init calls */
-    int             initialized;  /**< Tracks whether init ran at least once */
-} G = {.min_level    = EML_LEVEL_INFO,
-       .use_ts       = 1,
-       .mutex        = PTHREAD_MUTEX_INITIALIZER,
-       .writer       = NULL,
-       .writer_ud    = NULL,
-       /* default: fastest path, do NOT fflush before writev. The
-        * caller controls this via emlog_set_writev_flush(). */
-       .writev_flush = 0,
-       .init_gen     = 0,
-       .initialized  = 0};
+/****************************************************************************
+ * MARK: PRIVATE DEFINES
+ ****************************************************************************
+ */
 
 /* Maximum single write size we try to emit atomically. Prefer to use
  * the POSIX PIPE_BUF if available (writes <= PIPE_BUF to a pipe are
@@ -97,17 +80,66 @@ static struct
 #    define EML_THREAD_LOCAL /* fallback: single global cache (will be slow) */
 #endif
 
-EML_THREAD_LOCAL static time_t ts_cache_sec_tls        = 0;
-EML_THREAD_LOCAL static char   ts_cache_prefix_tls[32] = "";
-EML_THREAD_LOCAL static char   ts_cache_tz_tls[8]      = "+00:00";
+/****************************************************************************
+ * MARK: PRIVATE ENUMERATED VARIABLES
+ ****************************************************************************
+ */
+/* None */
 
-/* --------------------------------------------------------------------------
- * Static function declarations (private helpers)
- *
- * These are documented here with Doxygen so users reading the implementation
- * can understand the internals. They remain static (translation-unit
- * private) and are not part of the public API in emlog.h.
- * -------------------------------------------------------------------------- */
+/****************************************************************************
+ * MARK: PRIVATE STRUCTURED TYPES
+ ****************************************************************************
+ */
+
+ /**
+  * @brief Global logger state.
+  */
+static struct
+{
+    eml_level_t     min_level;    /**< Minimum level to emit */
+    int             use_ts;       /**< Whether timestamps are enabled */
+    pthread_mutex_t mutex;        /**< Mutex protecting the struct */
+    eml_writer_fn   writer;       /**< Optional custom writer */
+    void*           writer_ud;    /**< User data passed to writer */
+    int             writev_flush; /**< Whether to fflush before writev */
+    unsigned        init_gen;     /**< Counts successful init calls */
+    int             initialized;  /**< Tracks whether init ran at least once */
+} G = {.min_level    = EML_LEVEL_INFO,
+       .use_ts       = 1,
+       .mutex        = PTHREAD_MUTEX_INITIALIZER,
+       .writer       = NULL,
+       .writer_ud    = NULL,
+       /* default: fastest path, do NOT fflush before writev. The
+        * caller controls this via emlog_set_writev_flush(). */
+       .writev_flush = 0,
+       .init_gen     = 0,
+       .initialized  = 0};
+
+/****************************************************************************
+ * MARK: PRIVATE VARIABLES DEFINITIONS
+ ****************************************************************************
+ */
+
+/**
+ * @brief Per-thread timestamp cache variables.
+ */
+EML_THREAD_LOCAL static time_t _ts_cache_sec_tls        = 0;
+
+/**
+ * @brief Per-thread timestamp cache strings.
+ */
+EML_THREAD_LOCAL static char   _ts_cache_prefix_tls[32] = "";
+
+/**
+ * @brief Per-thread timezone offset cache string.
+ */
+EML_THREAD_LOCAL static char   _ts_cache_tz_tls[8]      = "+00:00";
+
+
+/****************************************************************************
+ * MARK: PRIVATE FUNCTION DECLARATIONS
+ ****************************************************************************
+ */
 
 /**
  * @brief Convert a log level to a short string.
@@ -117,7 +149,7 @@ EML_THREAD_LOCAL static char   ts_cache_tz_tls[8]      = "+00:00";
  * @param l Log level
  * @return const char* Short level name ("DBG","INF","WRN","ERR","CRT").
  */
-static const char* lvl_str(eml_level_t l);
+static const char* _level_to_string(eml_level_t l);
 
 /**
  * @brief Return a numeric thread identifier suitable for logging.
@@ -129,7 +161,7 @@ static const char* lvl_str(eml_level_t l);
  *
  * @return uint64_t Numeric thread identifier.
  */
-static uint64_t eml_tid(void);
+static uint64_t _get_thread_id(void);
 
 /** @brief Choose default FILE stream for a level (stdout/stderr).
  * 
@@ -138,7 +170,16 @@ static uint64_t eml_tid(void);
  * @param l Log level
  * @return FILE* stdout for DBG/INF, stderr for WRN/ERR/CRT
  */
-static FILE* default_stream(eml_level_t l);
+static FILE* _default_stream(eml_level_t l);
+
+/**
+ * @brief Copy cached timestamp prefix + ms + tz into output buffer.
+ * 
+ * @param out Output buffer
+ * @param n Size of output buffer
+ * @param ms Milliseconds part to append
+ */
+static void _copy_cached_ts(char* out, size_t n, unsigned ms);
 
 /** @brief Format current time as ISO8601 into buffer.
  * 
@@ -148,7 +189,7 @@ static FILE* default_stream(eml_level_t l);
  * @param n Size of output buffer
  * @param msec_out Optional pointer to receive milliseconds part
  */
-static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out);
+static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out);
 
 /** @brief Parse textual level name (from env) into eml_level_t.
  * 
@@ -157,7 +198,19 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out);
  *  @param s Level name string
  *  @return eml_level_t Parsed level, or EML_LEVEL_INFO on unrecognized/NULL
  */
-static eml_level_t parse_level(const char* s);
+static eml_level_t _string_to_level(const char* s);
+
+/**
+ * @brief Write a log line given as an iovec array.
+ *
+ * A variant of write_line that accepts an iovec array. On POSIX
+ * platforms (Linux) we use writev() to write header+message+"\n" in a
+ * single syscall, avoiding a temporary allocation. If a custom writer
+ * is installed we fall back to calling the writer with a contiguous
+ * buffer (constructed on the stack when small, or via malloc when
+ * necessary).
+ */
+static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt);
 
 /** @brief Core varargs logger implementation (expects mutex to be held).
  * 
@@ -168,25 +221,22 @@ static eml_level_t parse_level(const char* s);
  * @param fmt Printf-style format string
  * @param ap   va_list of arguments
  */
-static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap);
+static void _vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap);
 
-/* --------------------------------------------------------------------------
- * Public API implementations
- *
- * These definitions are placed before the static implementations so the file
- * reads as: helpers declarations -> public API -> private helpers. Each
- * public function has a brief Doxygen comment matching the header to keep
- * docs consistent for readers of the .c file.
- * -------------------------------------------------------------------------- */
+
+/****************************************************************************
+ * MARK: PUBLIC FUNCTIONS DEFINITIONS
+ ****************************************************************************
+ */
 
 void emlog_init(int min_level, bool timestamps)
 {
     pthread_mutex_lock(&G.mutex);
     eml_level_t new_level;
-    if(min_level < 0)
+    if(min_level < 0 || min_level > EML_LEVEL_CRIT)
     {
         const char* env = getenv("EMLOG_LEVEL");
-        new_level       = parse_level(env);
+        new_level       = _string_to_level(env);
     }
     else
     {
@@ -201,7 +251,7 @@ void emlog_init(int min_level, bool timestamps)
     G.initialized = 1;
     ++G.init_gen;
     pthread_mutex_unlock(&G.mutex);
-    EML_INFO("emlog", "Initialized emlog (level=%s, timestamps=%s)", lvl_str(new_level),
+    EML_INFO("emlog", "Initialized emlog (level=%s, timestamps=%s)", _level_to_string(new_level),
              new_use_ts ? "enabled" : "disabled");
 }
 
@@ -239,7 +289,7 @@ void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
     pthread_mutex_lock(&G.mutex);
     va_list ap;
     va_start(ap, fmt);
-    vlog(level, comp, fmt, ap);
+    _vlog(level, comp, fmt, ap);
     va_end(ap);
     pthread_mutex_unlock(&G.mutex);
 }
@@ -376,14 +426,12 @@ int eml_err_to_exit(eml_err_t e)
     }
 }
 
-/* --------------------------------------------------------------------------
- * Private static implementations
- *
- * The functions below implement the helpers declared above. They are kept
- * static to avoid leaking symbols into the public library ABI.
- * -------------------------------------------------------------------------- */
+/****************************************************************************
+ * MARK: PRIVATE FUNCTION DEFINITIONS
+ ****************************************************************************
+ */
 
-static const char* lvl_str(eml_level_t l)
+static const char* _level_to_string(eml_level_t l)
 {
     switch(l)
     {
@@ -402,12 +450,12 @@ static const char* lvl_str(eml_level_t l)
     }
 }
 
-static FILE* default_stream(eml_level_t l)
+static FILE* _default_stream(eml_level_t l)
 {
     return (l <= EML_LEVEL_INFO) ? stdout : stderr;
 }
 
-static uint64_t eml_tid(void)
+static uint64_t _get_thread_id(void)
 {
 #if defined(__linux__)
 #    if defined(SYS_gettid)
@@ -420,10 +468,10 @@ static uint64_t eml_tid(void)
 #endif
 }
 
-static void copy_cached_ts(char* out, size_t n, unsigned ms)
+static void _copy_cached_ts(char* out, size_t n, unsigned ms)
 {
     char buf[64];
-    int  w = snprintf(buf, sizeof buf, "%s.%03u%s", ts_cache_prefix_tls, ms, ts_cache_tz_tls);
+    int  w = snprintf(buf, sizeof buf, "%s.%03u%s", _ts_cache_prefix_tls, ms, _ts_cache_tz_tls);
     if(!n) return;
     if(w < 0)
     {
@@ -436,7 +484,7 @@ static void copy_cached_ts(char* out, size_t n, unsigned ms)
     out[copy] = '\0';
 }
 
-static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
+static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
 {
     /*
      * New cached strategy:
@@ -462,9 +510,9 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
      * locking or further calls. We append ms and tz to the cached
      * prefix residing in thread-local storage.
      */
-    if(sec == (__time_t)ts_cache_sec_tls)
+    if(sec == (__time_t)_ts_cache_sec_tls)
     {
-        copy_cached_ts(out, n, ms);
+        _copy_cached_ts(out, n, ms);
         if(msec_out) *msec_out = ms;
         return;
     }
@@ -473,7 +521,7 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
      * cache using thread-local storage. No global mutex needed since
      * each thread updates its own cache.
      */
-    if(sec != (__time_t)ts_cache_sec_tls)
+    if(sec != (__time_t)_ts_cache_sec_tls)
     {
         struct tm tm;
         /* localtime_r is thread-safe and will populate tm for the
@@ -488,9 +536,9 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
          * truncation on snprintf. strftime writes a NUL-terminated
          * string on success; fall back to empty prefix on failure.
          */
-        if(!strftime(ts_cache_prefix_tls, sizeof ts_cache_prefix_tls, "%Y-%m-%dT%H:%M:%S", &tm))
+        if(!strftime(_ts_cache_prefix_tls, sizeof _ts_cache_prefix_tls, "%Y-%m-%dT%H:%M:%S", &tm))
         {
-            ts_cache_prefix_tls[0] = '\0';
+            _ts_cache_prefix_tls[0] = '\0';
         }
 
         /* Build timezone offset as +HH:MM or -HH:MM. Using strftime(%z)
@@ -501,27 +549,27 @@ static void fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
         if(strftime(z, sizeof z, "%z", &tm) && strlen(z) >= 5)
         {
             /* z is e.g. +0200 or -0530; convert to +02:00 */
-            ts_cache_tz_tls[0] = z[0];
-            ts_cache_tz_tls[1] = z[1];
-            ts_cache_tz_tls[2] = z[2];
-            ts_cache_tz_tls[3] = ':';
-            ts_cache_tz_tls[4] = z[3];
-            ts_cache_tz_tls[5] = z[4];
-            ts_cache_tz_tls[6] = '\0';
+            _ts_cache_tz_tls[0] = z[0];
+            _ts_cache_tz_tls[1] = z[1];
+            _ts_cache_tz_tls[2] = z[2];
+            _ts_cache_tz_tls[3] = ':';
+            _ts_cache_tz_tls[4] = z[3];
+            _ts_cache_tz_tls[5] = z[4];
+            _ts_cache_tz_tls[6] = '\0';
         }
         else
         {
-            memcpy(ts_cache_tz_tls, "+00:00", sizeof "+00:00");
+            memcpy(_ts_cache_tz_tls, "+00:00", sizeof "+00:00");
         }
 
-        ts_cache_sec_tls = sec; /* publish updated cache for this thread */
+        _ts_cache_sec_tls = sec; /* publish updated cache for this thread */
     }
     /* Compose final string using thread-local cache. */
-    copy_cached_ts(out, n, ms);
+    _copy_cached_ts(out, n, ms);
     if(msec_out) *msec_out = ms;
 }
 
-static eml_level_t parse_level(const char* s)
+static eml_level_t _string_to_level(const char* s)
 {
     if(!s) return EML_LEVEL_INFO;
     if(!strcasecmp(s, "debug")) return EML_LEVEL_DBG;
@@ -532,17 +580,7 @@ static eml_level_t parse_level(const char* s)
     return EML_LEVEL_INFO;
 }
 
-/*
- * write_line_iov
- *
- * A variant of write_line that accepts an iovec array. On POSIX
- * platforms (Linux) we use writev() to write header+message+"\n" in a
- * single syscall, avoiding a temporary allocation. If a custom writer
- * is installed we fall back to calling the writer with a contiguous
- * buffer (constructed on the stack when small, or via malloc when
- * necessary).
- */
-static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
+static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
 {
     if(G.writer)
     {
@@ -585,7 +623,7 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
      * trailing newline atomically at the syscall level. This reduces
      * allocations and syscalls for the common case.
      */
-    FILE* out = default_stream(level);
+    FILE* out = _default_stream(level);
     int   fd  = fileno(out);
     /* If configured, flush stdio buffers to avoid interleaving with other
      * code that may be using stdio on the same stream (safer but slower).
@@ -607,7 +645,7 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
     (void)r; /* best-effort, ignore errors */
 #else
     /* Fallback: write each iovec with fwrite and append newline */
-    FILE* out = default_stream(level);
+    FILE* out = _default_stream(level);
     for(int i = 0; i < iovcnt; ++i)
         fwrite(iov[i].iov_base, 1, iov[i].iov_len, out);
     fputc('\n', out);
@@ -615,11 +653,11 @@ static void write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
 #endif
 }
 
-static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap)
+static void _vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap)
 {
     /*
      * -----------------------------------------------------------------
-     * vlog — the core, varargs logger implementation
+     * _vlog — the core, varargs logger implementation
      * -----------------------------------------------------------------
      *
      * This function is the heart of the logging pipeline. It is invoked
@@ -637,10 +675,10 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
      *    be discarded.
      *
      * 2) Timestamp formatting: if timestamps are enabled (G.use_ts), we
-     *    call fmt_time_iso8601 to produce an ISO8601 timestamp string.
-     *    The implementation of fmt_time_iso8601 uses a per-second cache
+     *    call _fmt_time_iso8601 to produce an ISO8601 timestamp string.
+     *    The implementation of _fmt_time_iso8601 uses a per-second cache
      *    to avoid expensive localtime/strftime operations in the hot
-     *    path. fmt_time_iso8601 also returns milliseconds which could be
+     *    path. _fmt_time_iso8601 also returns milliseconds which could be
      *    used if desired by callers (currently unused beyond storage).
      *
      * 3) Message formatting: we first attempt to format the message into
@@ -656,7 +694,7 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
      * 4) Header composition: we build a small header containing either
      *    "<ts> <lvl> [tid] [comp] " when timestamps are enabled, or
      *    "<lvl> [tid] [comp] " without timestamps. The thread id is
-     *    acquired via eml_tid() which returns a numeric identifier
+     *    acquired via _get_thread_id() which returns a numeric identifier
      *    suitable for human-readable logs.
      *
      * 5) Single-allocation line assembly: to ensure the writer sees a
@@ -691,7 +729,7 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
     if(G.use_ts)
     {
         unsigned dummy_ms;
-        fmt_time_iso8601(ts, sizeof ts, &dummy_ms);
+        _fmt_time_iso8601(ts, sizeof ts, &dummy_ms);
     }
 
     va_list ap2;
@@ -723,14 +761,14 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
     }
 
     char     head[128];
-    uint64_t tid  = eml_tid();
-    int      hlen = G.use_ts ? snprintf(head, sizeof head, "%s %s [%llu] [%s] ", ts, lvl_str(level),
+    uint64_t tid  = _get_thread_id();
+    int      hlen = G.use_ts ? snprintf(head, sizeof head, "%s %s [%llu] [%s] ", ts, _level_to_string(level),
                                         (unsigned long long)tid, comp ? comp : "-")
-                             : snprintf(head, sizeof head, "%s [%llu] [%s] ", lvl_str(level),
+                             : snprintf(head, sizeof head, "%s [%llu] [%s] ", _level_to_string(level),
                                         (unsigned long long)tid, comp ? comp : "-");
     if(hlen < 0) hlen = 0;
 
-    /* Build iovec for header and message, then call write_line_iov which
+    /* Build iovec for header and message, then call _write_line_iov which
      * will choose an efficient path (writev or writer callback).
      */
     struct iovec iov[3];
@@ -746,7 +784,7 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
         ++iovcnt;
     }
 
-    /* write_line_iov will append the trailing newline */
+    /* _write_line_iov will append the trailing newline */
     /* If total size would exceed LOG_MAX_WRITE, truncate the message
      * payload so the emitted iovec fits in a single atomic write. This
      * avoids kernel-level splitting on pipes and improves atomicity.
@@ -798,21 +836,21 @@ static void vlog(eml_level_t level, const char* comp, const char* fmt, va_list a
             }
         }
         /* emit truncated line */
-        write_line_iov(level, iov, iovcnt);
+        _write_line_iov(level, iov, iovcnt);
         /* emit a small warning about truncation (low verbosity):
          * "TRUNCATED: <lvl> <comp> ..."
          */
         char warnbuf[128];
-        int  w = snprintf(warnbuf, sizeof warnbuf, "TRUNCATED: %s [%llu] [%s]", lvl_str(level),
+        int  w = snprintf(warnbuf, sizeof warnbuf, "TRUNCATED: %s [%llu] [%s]", _level_to_string(level),
                           (unsigned long long)tid, comp ? comp : "-");
         struct iovec wiov[1];
         wiov[0].iov_base = warnbuf;
         wiov[0].iov_len  = (w > 0) ? (size_t)w : 0;
-        if(wiov[0].iov_len > 0) write_line_iov(level, wiov, 1);
+        if(wiov[0].iov_len > 0) _write_line_iov(level, wiov, 1);
     }
     else
     {
-        write_line_iov(level, iov, iovcnt);
+        _write_line_iov(level, iov, iovcnt);
     }
     free(heap);
 }
