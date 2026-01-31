@@ -151,6 +151,15 @@ EML_THREAD_LOCAL static char   _ts_cache_tz_tls[8]      = "+00:00";
  */
 static const char* _level_to_string(eml_level_t l);
 
+/** @brief Parse textual level name (from env) into eml_level_t.
+ * 
+ * Handles "debug", "info", "warn", "error", "crit" (case-insensitive).
+ * 
+ *  @param s Level name string
+ *  @return eml_level_t Parsed level, or EML_LEVEL_INFO on unrecognized/NULL
+ */
+static eml_level_t _string_to_level(const char* s);
+
 /**
  * @brief Return a numeric thread identifier suitable for logging.
  *
@@ -190,15 +199,6 @@ static void _copy_cached_ts(char* out, size_t n, unsigned ms);
  * @param msec_out Optional pointer to receive milliseconds part
  */
 static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out);
-
-/** @brief Parse textual level name (from env) into eml_level_t.
- * 
- * Handles "debug", "info", "warn", "error", "crit" (case-insensitive).
- * 
- *  @param s Level name string
- *  @return eml_level_t Parsed level, or EML_LEVEL_INFO on unrecognized/NULL
- */
-static eml_level_t _string_to_level(const char* s);
 
 /**
  * @brief Write a log line given as an iovec array.
@@ -449,6 +449,16 @@ static const char* _level_to_string(eml_level_t level)
             return "UNK";
     }
 }
+static eml_level_t _string_to_level(const char* s)
+{
+    if(!s) return EML_LEVEL_INFO;
+    if(!strcasecmp(s, "debug")) return EML_LEVEL_DBG;
+    if(!strcasecmp(s, "info")) return EML_LEVEL_INFO;
+    if(!strcasecmp(s, "warn") || !strcasecmp(s, "warning")) return EML_LEVEL_WARN;
+    if(!strcasecmp(s, "error")) return EML_LEVEL_ERROR;
+    if(!strcasecmp(s, "crit") || !strcasecmp(s, "fatal")) return EML_LEVEL_CRIT;
+    return EML_LEVEL_INFO;
+}
 
 static FILE* _default_stream(eml_level_t l)
 {
@@ -567,17 +577,6 @@ static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
     /* Compose final string using thread-local cache. */
     _copy_cached_ts(out, n, ms);
     if(msec_out) *msec_out = ms;
-}
-
-static eml_level_t _string_to_level(const char* s)
-{
-    if(!s) return EML_LEVEL_INFO;
-    if(!strcasecmp(s, "debug")) return EML_LEVEL_DBG;
-    if(!strcasecmp(s, "info")) return EML_LEVEL_INFO;
-    if(!strcasecmp(s, "warn") || !strcasecmp(s, "warning")) return EML_LEVEL_WARN;
-    if(!strcasecmp(s, "error")) return EML_LEVEL_ERROR;
-    if(!strcasecmp(s, "crit") || !strcasecmp(s, "fatal")) return EML_LEVEL_CRIT;
-    return EML_LEVEL_INFO;
 }
 
 static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
