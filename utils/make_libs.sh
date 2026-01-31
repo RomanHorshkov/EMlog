@@ -79,5 +79,5 @@ ar rcs build/libemlog.a build/emlog.o
 echo "compiled libraries for $ROOT_DIR project into $(pwd)"
 
 # Remove useless files
-rm build/*.o
+#rm build/*.o
 
