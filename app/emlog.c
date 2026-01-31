@@ -478,20 +478,14 @@ static uint64_t _get_thread_id(void)
 #endif
 }
 
-static void _copy_cached_ts(char* out, size_t n, unsigned ms)
+static void _copy_cached_ts(char *out, size_t n, unsigned ms)
 {
-    char buf[64];
-    int  w = snprintf(buf, sizeof buf, "%s.%03u%s", _ts_cache_prefix_tls, ms, _ts_cache_tz_tls);
-    if(!n) return;
-    if(w < 0)
-    {
-        out[0] = '\0';
-        return;
-    }
-    size_t copy = (size_t)w;
-    if(copy >= n) copy = n - 1;
-    memcpy(out, buf, copy);
-    out[copy] = '\0';
+    if (!out || n == 0) return;
+
+    if (ms > 999) ms %= 1000;  /* optional policy: normalize */
+
+    int w = snprintf(out, n, "%s.%03u%s", _ts_cache_prefix_tls, ms, _ts_cache_tz_tls);
+    if (w < 0) out[0] = '\0';
 }
 
 static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
@@ -520,7 +514,7 @@ static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
      * locking or further calls. We append ms and tz to the cached
      * prefix residing in thread-local storage.
      */
-    if(sec == (__time_t)_ts_cache_sec_tls)
+    if(sec == (time_t)_ts_cache_sec_tls)
     {
         _copy_cached_ts(out, n, ms);
         if(msec_out) *msec_out = ms;
@@ -531,7 +525,7 @@ static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
      * cache using thread-local storage. No global mutex needed since
      * each thread updates its own cache.
      */
-    if(sec != (__time_t)_ts_cache_sec_tls)
+    if(sec != (time_t)_ts_cache_sec_tls)
     {
         struct tm tm;
         /* localtime_r is thread-safe and will populate tm for the
