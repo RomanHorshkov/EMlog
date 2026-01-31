@@ -21,7 +21,7 @@ mkdir -p "$BUILD_DIR"
 rm -f "${BUILD_DIR}"/*.gcda "${BUILD_DIR}"/*.gcno "${BUILD_DIR}"/*.gcov 2>/dev/null || true
 
 # build without optimization and debug options and coverage option
-gcc -std=c11 -O0 -g --coverage -I. -Iapp -c tests/UTs/test_private.c -o "${BUILD_DIR}/test_private.o"
+gcc -std=c11 -O0 -g --coverage -I. -Iapp -c tests/UTs/privateAPI/test_private.c -o "${BUILD_DIR}/test_private.o"
 gcc --coverage "${BUILD_DIR}/test_private.o" -o "${BUILD_DIR}/ut_private" -lcmocka -pthread
 
 # generate coverage
@@ -53,8 +53,3 @@ gcovr -r "${ROOT_DIR}" \
     --exclude 'tests/' \
     --json-summary \
     -o "${RESULT_DIR}/coverage-summary.json"
-
-
-
-
-
