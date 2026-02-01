@@ -3,8 +3,7 @@ name: ci
 on:
   push:
     branches:
-      - main
-      - journal_**
+      - master
   pull_request:
   workflow_dispatch:
 
@@ -16,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build & unit tests
+  unit-tests:
+    name: Unit tests (manual scripts)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,19 +24,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential ninja-build cmake pkg-config libcmocka-dev
+          sudo apt-get install -y build-essential pkg-config libcmocka-dev gcovr jq
 
-      - name: Configure (CMake)
+      - name: Build + run UTs + generate coverage
         run: |
-          cmake -S . -B build \
-                -G Ninja \
-                -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-                -DEMLOG_BUILD_TESTS=ON
+          ./utils/make_UTs_all.sh
 
-      - name: Build
-        run: |
-          cmake --build build --target emlog_static emlog_shared emlog_unit_tests emlog_integration_test
-
-      - name: Run unit tests
-        run: |
-          ctest --test-dir build --output-on-failure
+      - name: Upload unit-test coverage (HTML/XML/JSON)
+        uses: actions/upload-artifact@v4
+        with:
+          name: uts-coverage
+          path: |
+            tests/results/private_UTs
+            tests/results/public_UTs
+            tests/results/UTs_all
