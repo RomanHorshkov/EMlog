@@ -15,27 +15,24 @@ permissions:
 jobs:
   coverage:
     runs-on: ubuntu-latest
-    env:
-      BUILD_DIR: build/coverage
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential ninja-build cmake pkg-config libcmocka-dev gcovr jq
+          sudo apt-get install -y build-essential pkg-config libcmocka-dev gcovr jq
 
       - name: Generate coverage reports
         run: |
           set -euo pipefail
-          ./utils/gen_coverage.sh
+          ./utils/make_UTs_all.sh
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: |
-            tests/results/UT_coverage.html
-            tests/results/UT_coverage.xml
-            tests/results/coverage-summary.json
-            tests/results/coverage-percent.txt
+            tests/results/private_UTs
+            tests/results/public_UTs
+            tests/results/UTs_all
