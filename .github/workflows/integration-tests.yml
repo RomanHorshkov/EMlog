@@ -1,4 +1,4 @@
-name: ci
+name: integration-tests
 
 on:
   push:
@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deb-package:
-    name: Build .deb package
+  it:
+    name: Integration test (manual script)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,15 +24,15 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config fakeroot
+          sudo apt-get install -y build-essential pkg-config
 
-      - name: Build .deb
+      - name: Build + run integration test
         run: |
-          ./utils/make_deb.sh
+          ./utils/make_ITs.sh
 
-      - name: Upload .deb artifact
+      - name: Upload integration result
         uses: actions/upload-artifact@v4
         with:
-          name: deb-package
+          name: integration-result
           path: |
-            build/debs/*.deb
+            tests/results/ITs/integration_result.txt

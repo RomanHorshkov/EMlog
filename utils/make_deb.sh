@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="${ROOT_DIR:-$HOME/Projects/EMlog}"
+ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PKG_NAME="emlog"
 
 cd "$ROOT_DIR"
@@ -17,13 +17,10 @@ ARCH="$(dpkg --print-architecture)"
 # Split version safely (keep IFS local)
 IFS='.' read -r MAJOR MINOR PATCH <<< "$VER"
 
-# Prepare package staging dir
-
-STAGE="pkgroot"
+# Prepare package staging dir (kept under build/ so it doesn't pollute the repo root).
+STAGE="${ROOT_DIR}/build/pkgroot"
 rm -rf "$STAGE"
-mkdir -p "$STAGE/DEBIAN"
-mkdir -p "$STAGE/usr/local/lib"
-mkdir -p "$STAGE/usr/local/include"
+mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/local/lib" "$STAGE/usr/local/include"
 
 # Install payload into /usr/local (inside the package)
 install -m 0644 app/emlog.h "$STAGE/usr/local/include/emlog.h"
@@ -70,15 +67,10 @@ fakeroot dpkg-deb --build "$STAGE" "$DEB"
 echo
 echo "Built complete"
 
-# Remove completely the build directory to leave the pkgconfig dir.
-rm -rf build/
-rm -rf pkgroot/
+OUT_DIR="${OUT_DIR:-${ROOT_DIR}/build/debs}"
+mkdir -p "$OUT_DIR"
+mv -f "$DEB" "$OUT_DIR/"
 
 echo "see .deb info with dpkg-deb -c $DEB or dpkg-deb -I $DEB"
-
-mv $DEB /tmp/debs/
-
-echo "moved to /tmp/debs/"
-
-echo "install with sudo apt install /tmp/debs/$DEB"
-
+echo "moved to $OUT_DIR/"
+echo "install with sudo apt install $OUT_DIR/$DEB"

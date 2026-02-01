@@ -8,9 +8,8 @@ START_DIR="$(pwd -P)"
 cleanup() { cd -- "$START_DIR"; }
 trap cleanup EXIT
 
-# Set the project root (expand ~ safely)
-ROOT_DIR="$HOME/Projects/EMlog"
-
+# Set the project root (works regardless of where the script is launched from)
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd -- "$ROOT_DIR"
 
 # Read the VERSION file and split it into its components

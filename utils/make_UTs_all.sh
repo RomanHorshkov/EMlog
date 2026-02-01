@@ -25,10 +25,10 @@ if ! command -v gcovr >/dev/null 2>&1; then
   exit 1
 fi
 
-printf '[UTs] running private UTs...\n'
+printf '[UTs] running private API UTs...\n'
 "${ROOT_DIR}/utils/make_UTs_priv.sh"
 
-printf '[UTs] running public UTs...\n'
+printf '[UTs] running public API UTs...\n'
 "${ROOT_DIR}/utils/make_UTs_pub.sh"
 
 RESULT_DIR="${ROOT_DIR}/tests/results/UTs_all"
@@ -57,4 +57,3 @@ gcovr -r "${ROOT_DIR}" \
   -o "${RESULT_DIR}/coverage-summary.json"
 
 printf '[coverage] report ready: %s\n' "${RESULT_DIR}/UTs_all_coverage.html"
-
