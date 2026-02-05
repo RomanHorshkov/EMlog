@@ -38,7 +38,7 @@ Version: $VER
 Section: libs
 Priority: optional
 Architecture: $ARCH
-Maintainer: Roman Horshkov <roman.horshkov@gmail.com>
+Maintainer: Roman Horshkov <https://github.com/RomanHorshkov>
 Description: EMlog personal library installed under /usr/local
 EOF
 
