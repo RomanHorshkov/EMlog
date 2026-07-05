@@ -1,3 +1,8 @@
+/**
+ * @file integration_test.c
+ * @brief Multi-thread integration test for EMlog writer dispatch and line accounting.
+ */
+
 #ifndef _GNU_SOURCE
 #    define _GNU_SOURCE
 #endif
@@ -15,10 +20,10 @@
 /* Integration-test parameters (no CLI args on purpose). */
 enum
 {
-    IT_THREADS    = 10,
-    IT_MESSAGES   = 1000,
-    IT_ENABLE_TS  = 0,
-    IT_LOG_LEVEL  = EML_LEVEL_INFO,
+    IT_THREADS   = 10,
+    IT_MESSAGES  = 1000,
+    IT_ENABLE_TS = 0,
+    IT_LOG_LEVEL = EML_LEVEL_INFO,
 };
 
 struct thr_arg
@@ -98,19 +103,16 @@ int main(void)
     double elapsed = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
 
     const unsigned long expected = (unsigned long)nthreads * (unsigned long)msgs;
-    const unsigned long seen =
-        atomic_load_explicit(&g_lines, memory_order_relaxed);
+    const unsigned long seen     = atomic_load_explicit(&g_lines, memory_order_relaxed);
 
     FILE* f = fopen("tests/results/ITs/integration_result.txt", "w");
     if(f)
     {
-        fprintf(f, "threads=%d msgs=%d elapsed=%.6f lines=%lu expected=%lu\n", nthreads, msgs,
-                elapsed, seen, expected);
+        fprintf(f, "threads=%d msgs=%d elapsed=%.6f lines=%lu expected=%lu\n", nthreads, msgs, elapsed, seen, expected);
         fclose(f);
     }
 
-    printf("threads=%d msgs=%d elapsed=%.6f lines=%lu expected=%lu pid=%d\n", nthreads, msgs,
-           elapsed, seen, expected, (int)getpid());
+    printf("threads=%d msgs=%d elapsed=%.6f lines=%lu expected=%lu pid=%d\n", nthreads, msgs, elapsed, seen, expected, (int)getpid());
     if(seen != expected)
     {
         fprintf(stderr, "line count mismatch: got %lu expected %lu\n", seen, expected);

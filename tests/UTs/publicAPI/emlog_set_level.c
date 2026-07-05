@@ -1,14 +1,14 @@
-/*
- * tests/unit/emlog_set_level.c
- * Minimal, single-file unit test for emlog_set_level using cmocka.
+/**
+ * @file emlog_set_level.c
+ * @brief Unit tests for runtime EMlog minimum-level filtering.
  */
 
+#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <cmocka.h>
 
 #include "emlog.h"
 #include "unit_tests.h"
@@ -49,8 +49,7 @@ void emlog_set_level_simple(void** state)
     emlog_set_writer(capture_writer, &c);
     emlog_init(-1, false);
 
-    eml_level_t  levels[] = {EML_LEVEL_DBG, EML_LEVEL_INFO, EML_LEVEL_WARN, EML_LEVEL_ERROR,
-                             EML_LEVEL_CRIT};
+    eml_level_t  levels[] = {EML_LEVEL_DBG, EML_LEVEL_INFO, EML_LEVEL_WARN, EML_LEVEL_ERROR, EML_LEVEL_CRIT};
     const char*  marks[]  = {"DBG_MARKER", "INF_MARKER", "WRN_MARKER", "ERR_MARKER", "CRT_MARKER"};
     const size_t nlevels  = sizeof(levels) / sizeof(levels[0]);
 

@@ -6,7 +6,7 @@ TabWidth: 4                   # Set tab width to 4 spaces, even if tabs not used
 UseTab: Never                 # Always use spaces, never tabs
 
 # Code formatting limits
-ColumnLimit: 100               # Maximum line length
+ColumnLimit: 140              # Maximum line length
 SortIncludes: true            # Alphabetize #include directives
 IncludeBlocks: Preserve       # Preserve relative order of blocks of includes
 
@@ -53,7 +53,7 @@ AlignConsecutiveMacros:
   AcrossComments: true
 
 # Comment handling
-ReflowComments: false          # Do not reflow or rewrap block comments
+ReflowComments: true           # Reflow block comments to the configured column limit
 CommentPragmas: '^(NOLINT|NOCFMT)'  # Don't reflow comments matching these pragmas
 
 # Extra: Balance readability with control and standards compliance

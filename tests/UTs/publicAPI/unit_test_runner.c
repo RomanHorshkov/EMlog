@@ -1,11 +1,12 @@
-/* tests/unit/unit_test_runner.c
- * Single runner that aggregates all unit tests for emlog
+/**
+ * @file unit_test_runner.c
+ * @brief CMocka runner that aggregates the EMlog public API unit-test wrappers.
  */
 
+#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <cmocka.h>
 #include "unit_tests.h"
 
 /* declare external test functions from other unit files */
@@ -27,20 +28,13 @@ extern void emlog_default_writer_stderr(void** state);
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(emlog_set_level_simple),
-        cmocka_unit_test(emlog_init_default_env),
-        cmocka_unit_test(emlog_init_explicit_dbg),
-        cmocka_unit_test(emlog_init_env_parsing),
-        cmocka_unit_test(emlog_init_env_variants),
-        cmocka_unit_test(emlog_timestamps_true),
-        cmocka_unit_test(emlog_timestamps_false),
-        cmocka_unit_test(emlog_timestamps_toggle),
-        cmocka_unit_test(emlog_error_from_errno),
-        cmocka_unit_test(emlog_error_name_strings),
-        cmocka_unit_test(emlog_error_exit_codes),
-        cmocka_unit_test(emlog_log_errno_captures_context),
-        cmocka_unit_test(emlog_default_writer_stdout),
-        cmocka_unit_test(emlog_default_writer_stderr),
+        cmocka_unit_test(emlog_set_level_simple),      cmocka_unit_test(emlog_init_default_env),
+        cmocka_unit_test(emlog_init_explicit_dbg),     cmocka_unit_test(emlog_init_env_parsing),
+        cmocka_unit_test(emlog_init_env_variants),     cmocka_unit_test(emlog_timestamps_true),
+        cmocka_unit_test(emlog_timestamps_false),      cmocka_unit_test(emlog_timestamps_toggle),
+        cmocka_unit_test(emlog_error_from_errno),      cmocka_unit_test(emlog_error_name_strings),
+        cmocka_unit_test(emlog_error_exit_codes),      cmocka_unit_test(emlog_log_errno_captures_context),
+        cmocka_unit_test(emlog_default_writer_stdout), cmocka_unit_test(emlog_default_writer_stderr),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

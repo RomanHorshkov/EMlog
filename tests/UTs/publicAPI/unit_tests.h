@@ -1,10 +1,6 @@
-/* tests/unit/unit_tests.h
- * Declarations for exported test wrapper functions so unit test
- * compilation does not emit "no previous prototype" warnings.
- *
- * This header is intentionally minimal: it only declares the public
- * wrappers defined by individual unit files. Include this header from
- * test sources that register or reference these functions.
+/**
+ * @file unit_tests.h
+ * @brief Declarations for EMlog unit-test wrapper functions used by the unified CMocka runner.
  */
 
 #ifndef TESTS_UNIT_UNIT_TESTS_H

@@ -2,17 +2,13 @@
  * @file emlog.h
  * @brief Tiny, thread-safe logging and canonical error categorization API.
  *
- * This header exposes a compact logging API with printf-like formatting,
- * optional ISO8601 timestamps, and a mapping layer from POSIX errno values
- * to a small set of canonical error categories. The implementation is
- * thread-safe and allows installing a custom writer callback.
+ * This header exposes a compact logging API with printf-like formatting, optional ISO8601 timestamps, and a mapping layer from POSIX errno
+ * values to a small set of canonical error categories. The implementation is thread-safe and allows installing a custom writer callback.
  *
- * The API aims to be minimal and stable to allow building a small static
- * library that other projects can embed. All public symbols are declared
- * here and documented with Doxygen for easy generation of reference docs.
+ * The API aims to be minimal and stable to allow building a small static library that other projects can embed. All public symbols are
+ * declared here and documented with Doxygen for easy generation of reference docs.
  *
- * License: MIT
- * Copyright: 2025 Roman Horshkov
+ * License: MIT Copyright: 2025 Roman Horshkov
  */
 
 #ifndef EMLOG_H
@@ -30,8 +26,7 @@ extern "C"
 /**
  * @brief Logging levels used by the library.
  *
- * These are intentionally short (three-letter) and do not collide with
- * syslog names. Use these values when calling emlog_log() or when
+ * These are intentionally short (three-letter) and do not collide with syslog names. Use these values when calling emlog_log() or when
  * adjusting the runtime minimum log level via emlog_set_level().
  */
 typedef enum
@@ -47,9 +42,8 @@ typedef enum
  * @brief Canonical error categories used to map errno values to a small set
  * of high-level outcomes.
  *
- * These categories are portable across platforms and can be converted to
- * exit codes with eml_err_to_exit() or mapped back to their string name
- * with eml_err_name().
+ * These categories are portable across platforms and can be converted to exit codes with eml_err_to_exit() or mapped back to their string
+ * name with eml_err_name().
  */
 typedef enum
 {
@@ -70,8 +64,7 @@ typedef enum
 
 /**
  * @name Exit codes
- * These map a subset of canonical errors to common exit codes used by
- * programs (helps CLI utilities). They are simple integers and may be
+ * These map a subset of canonical errors to common exit codes used by programs (helps CLI utilities). They are simple integers and may be
  * returned by eml_err_to_exit().
  */
 /*@{*/
@@ -88,9 +81,8 @@ enum
 /**
  * @brief Optional writer callback used to customize output destination.
  *
- * If a writer is installed with emlog_set_writer(), the logger will call
- * this function for each formatted line. The implementation should return
- * the number of bytes written on success or a negative value on failure.
+ * If a writer is installed with emlog_set_writer(), the logger will call this function for each formatted line. The implementation should
+ * return the number of bytes written on success or a negative value on failure.
  *
  * @param lvl Log level for the line.
  * @param line Pointer to a NUL-terminated string (not including trailing \n).
@@ -103,15 +95,11 @@ typedef ssize_t (*eml_writer_fn)(eml_level_t lvl, const char* line, size_t n, vo
 /**
  * @brief Initialize the global logger state.
  *
- * This must be called early if you want to set a non-default minimum
- * level or disable timestamps. If @p min_level is negative the current
- * value of the EMLOG_LEVEL environment variable will be parsed and used
- * (accepted values: debug, info, warn, error, crit).
+ * This must be called early if you want to set a non-default minimum level or disable timestamps. If @p min_level is negative the current
+ * value of the EMLOG_LEVEL environment variable will be parsed and used (accepted values: debug, info, warn, error, crit).
  *
- * Calling emlog_init() multiple times is safe; each invocation replaces
- * the previous configuration (the most recent call "wins"), which
- * allows different subsystems to reconfigure the logger without
- * tearing down internal state.
+ * Calling emlog_init() multiple times is safe; each invocation replaces the previous configuration (the most recent call "wins"), which
+ * allows different subsystems to reconfigure the logger without tearing down internal state.
  *
  * @param min_level Minimum level to emit (or negative to read EMLOG_LEVEL).
  * @param timestamps Enable ISO8601 timestamps when true.
@@ -137,8 +125,7 @@ void emlog_enable_timestamps(bool on);
 /**
  * @brief Install a custom writer callback.
  *
- * Passing NULL for @p fn restores the default behavior which writes to
- * stdout (info and below) and stderr (errors and above).
+ * Passing NULL for @p fn restores the default behavior which writes to stdout (info and below) and stderr (errors and above).
  *
  * @param fn Writer callback or NULL to restore default.
  * @param user User data pointer passed to the writer when invoked.
@@ -148,20 +135,17 @@ void emlog_set_writer(eml_writer_fn fn, void* user);
 /**
  * @brief Control whether the logger flushes stdio buffers before using writev.
  *
- * When true (default) the logger will call fflush() on the destination
- * FILE* before issuing a writev() syscall. This avoids interleaving when
- * other code may be using stdio on the same stream (safe but slower).
- * When false the logger will write directly via writev() (faster but
- * may interleave with stdio-buffered output).
+ * When true (default) the logger will call fflush() on the destination FILE* before issuing a writev() syscall. This avoids interleaving
+ * when other code may be using stdio on the same stream (safe but slower). When false the logger will write directly via writev() (faster
+ * but may interleave with stdio-buffered output).
  */
 void emlog_set_writev_flush(bool on);
 
 /**
  * @brief Core printf-style logger.
  *
- * The logger is thread-safe and will drop messages whose level is below
- * the current minimum. The @p comp argument is an optional component/tag
- * string; pass NULL or "-" if not applicable.
+ * The logger is thread-safe and will drop messages whose level is below the current minimum. The @p comp argument is an optional
+ * component/tag string; pass NULL or "-" if not applicable.
  *
  * @note This function is declared with a printf attribute so format
  *       string mismatches are detected at compile time when supported.
@@ -170,24 +154,21 @@ void emlog_set_writev_flush(bool on);
  * @param comp Component/tag string (may be NULL).
  * @param fmt printf-style format string followed by arguments.
  */
-void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
-    __attribute__((format(printf, 3, 4)));
+void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...) __attribute__((format(printf, 3, 4)));
 
 /**
  * @brief Log a message that includes formatted errno text.
  *
- * This composes the formatted message from @p fmt and appends the
- * strerror() text for @p err. It is safe to call from signal handlers as
- * long as the C library implementations used are async-signal-safe for
- * the invoked routines (most are not); prefer using it from normal code.
+ * This composes the formatted message from @p fmt and appends the strerror() text for @p err. It is safe to call from signal handlers as
+ * long as the C library implementations used are async-signal-safe for the invoked routines (most are not); prefer using it from normal
+ * code.
  *
  * @param level Log level.
  * @param comp Optional component/tag.
  * @param err errno value to format (e.g., errno).
  * @param fmt printf-style format string and args.
  */
-void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* fmt, ...)
-    __attribute__((format(printf, 4, 5)));
+void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* fmt, ...) __attribute__((format(printf, 4, 5)));
 
 /* Short logging macros for easy call-sites. These forward to emlog_log().
  * Example: EML_INFO("main", "listening on %d", port);
@@ -231,8 +212,7 @@ const char* eml_err_name(eml_err_t e);
 /**
  * @brief Map a canonical error category to a suggested program exit code.
  *
- * This is useful for CLI programs that want to return a meaningful exit
- * status derived from a library error.
+ * This is useful for CLI programs that want to return a meaningful exit status derived from a library error.
  *
  * @param e Canonical error category.
  * @return int Suggested exit code.

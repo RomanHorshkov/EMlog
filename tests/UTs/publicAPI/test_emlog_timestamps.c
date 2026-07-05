@@ -1,35 +1,25 @@
-/* tests/unit/test_emlog_timestamps.c
+/**
+ * @file test_emlog_timestamps.c
+ * @brief Unit tests for enabling, disabling, and toggling EMlog timestamp emission.
  *
- * Unit tests for emlog_enable_timestamps()
- *
- * These tests focus on the observable effect of toggling timestamp
- * emission in the logger. The logger provides a callback hook via
- * emlog_set_writer() which allows us to capture formatted log lines
- * without touching stdout/stderr. We rely on that hook to assert the
- * presence or absence of the ISO8601-like timestamp prefix.
- *
- * Tests are deliberately well-commented to explain the rationale and
- * the invariants they check. They are small, isolated, and restore
- * global state (writer) on exit.
+ * The tests use a custom writer to capture formatted log lines without touching stdout or stderr, then assert stable timestamp and
+ * non-timestamp header invariants.
  */
 
+#include <cmocka.h>
 #include <ctype.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <cmocka.h>
 
 #include "emlog.h"
 #include "unit_tests.h"
 
 /*
- * Small capture writer used across the tests.
- * It appends the provided bytes into a user-owned buffer and returns
- * the number of bytes "written". The logger calls the writer with a
- * contiguous line buffer (no trailing newline), so we inspect the
- * captured bytes directly.
+ * Small capture writer used across the tests. It appends the provided bytes into a user-owned buffer and returns the number of bytes
+ * "written". The logger calls the writer with a contiguous line buffer (no trailing newline), so we inspect the captured bytes directly.
  */
 struct capture
 {
@@ -56,16 +46,13 @@ static ssize_t capture_writer(eml_level_t lvl, const char* line, size_t n, void*
 }
 
 /*
- * Test: enabling timestamps makes the emitted line start with a
- * timestamp-like prefix. The exact formatting is handled by the logger
- * (ISO8601-like). We do not assert an exact format (locale/timezone
- * differences), instead we check a few robust invariants:
+ * Test: enabling timestamps makes the emitted line start with a timestamp-like prefix. The exact formatting is handled by the logger
+ * (ISO8601-like). We do not assert an exact format (locale/timezone differences), instead we check a few robust invariants:
  *  - the very first character is a digit (year starts with digits)
  *  - the line contains a 'T' separating date and time (ISO8601)
  *  - the line still contains the level name (e.g. "INF") somewhere
  *
- * These checks make the test resistant to small formatting changes but
- * still ensure that timestamps are emitted when enabled.
+ * These checks make the test resistant to small formatting changes but still ensure that timestamps are emitted when enabled.
  */
 static void test_enable_timestamps_true(void** state)
 {
@@ -123,10 +110,8 @@ static void test_enable_timestamps_true(void** state)
 }
 
 /*
- * Test: disabling timestamps results in a line that begins with the
- * level string (e.g. "INF ...") — this is the logger's non-timestamp
- * header layout. We assert that the captured buffer starts with the
- * three-letter level name to confirm the timestamp was omitted.
+ * Test: disabling timestamps results in a line that begins with the level string (e.g. "INF ...") - this is the logger's non-timestamp
+ * header layout. We assert that the captured buffer starts with the three-letter level name to confirm the timestamp was omitted.
  */
 static void test_enable_timestamps_false(void** state)
 {
@@ -157,11 +142,8 @@ static void test_enable_timestamps_false(void** state)
 }
 
 /*
- * Test: toggling timestamps at runtime. We perform two independent
- * captures to keep the assertions simple and avoid parsing a
- * concatenated buffer. First we enable timestamps and check the
- * timestamp-like output, then we disable them and confirm the
- * non-timestamped format.
+ * Test: toggling timestamps at runtime. We perform two independent captures to keep the assertions simple and avoid parsing a concatenated
+ * buffer. First we enable timestamps and check the timestamp-like output, then we disable them and confirm the non-timestamped format.
  */
 static void test_enable_timestamps_toggle(void** state)
 {

@@ -1,7 +1,9 @@
-/* tests/unit/test_emlog_default_writer.c
- * Covers default writev path (stdout/stderr) and flush toggle.
+/**
+ * @file test_emlog_default_writer.c
+ * @brief Unit tests for EMlog default stdout/stderr routing and writev flush behavior.
  */
 
+#include <cmocka.h>
 #include <fcntl.h>
 #include <setjmp.h>
 #include <stdarg.h>
@@ -9,7 +11,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <cmocka.h>
 
 #include "emlog.h"
 #include "unit_tests.h"
@@ -46,8 +47,7 @@ static void restore_fd(int fd, int saved)
     close(saved);
 }
 
-static void assert_default_route(eml_level_t level, const char* comp, const char* msg, int fd,
-                                 FILE* stream)
+static void assert_default_route(eml_level_t level, const char* comp, const char* msg, int fd, FILE* stream)
 {
     int pipefd[2];
     int saved_fd = -1;
