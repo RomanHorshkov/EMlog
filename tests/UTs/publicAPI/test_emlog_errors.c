@@ -3,11 +3,11 @@
  * @brief Unit tests for EMlog errno mapping, error names, exit-code mapping, and errno log formatting.
  */
 
-#include <cmocka.h>
 #include <errno.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <cmocka.h>
 #include <stdlib.h>
 #include <string.h>
 

@@ -13,10 +13,10 @@
  * file-static helpers become callable from tests. */
 #include "emlog.c"
 
-#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <cmocka.h>
 
 static void test_private_level_to_string(void** state)
 {

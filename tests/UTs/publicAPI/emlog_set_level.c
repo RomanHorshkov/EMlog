@@ -3,10 +3,10 @@
  * @brief Unit tests for runtime EMlog minimum-level filtering.
  */
 
-#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <cmocka.h>
 #include <stdlib.h>
 #include <string.h>
 

@@ -3,10 +3,10 @@
  * @brief CMocka runner that aggregates the EMlog public API unit-test wrappers.
  */
 
-#include <cmocka.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <cmocka.h>
 #include "unit_tests.h"
 
 /* declare external test functions from other unit files */
