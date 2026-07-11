@@ -28,13 +28,13 @@ Everything you need to build/run is in `utils/`.
 
 | Script | Purpose |
 | ------ | ------- |
-| `utils/make_libs.sh` | Build `libemlog.so.<VERSION>` and `libemlog.a` into `build/` (reads `VERSION`). |
-| `utils/build_tests.sh` | Build unit + integration tests (CMake/CTest). |
-| `utils/run_tests.sh` | Run tests (CTest). |
-| `utils/gen_coverage.sh` | Generate coverage report. |
-| `utils/make_deb.sh` | Build a Debian package (if you use it). |
-
-Note: `utils/make_libs.sh` currently assumes the repo lives at `$HOME/Projects/EMlog` (see `ROOT_DIR` inside the script).
+| `utils/build_libs.sh [profile …]` | Build `libemlog.so.<VERSION>` + `libemlog.a` per profile into `build/<profile>/` (default: debug audit sanitize release); release artifacts are gated by `check_hardening.sh`. |
+| `utils/make_UTs_pub.sh` / `make_UTs_priv.sh` / `make_UTs_all.sh` | Build + run the public / private / all unit tests. |
+| `utils/make_ITs.sh` | Build + run the integration test. |
+| `utils/run_pipeline.sh` | The full board: libs → unit tests → integration → deb. |
+| `utils/build_deb.sh` | Release Debian package + `SHA256SUMS` (VERSION-validated, hardening-checked). |
+| `utils/check_hardening.sh` | readelf assertions on built ELFs (full RELRO, NX stack, …). |
+| `utils/gcc_build_profiles.sh` | The shared profile catalog — synced from `Utils/compilation/`, never edited here. |
 
 Running tests
 -------------

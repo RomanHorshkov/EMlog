@@ -28,7 +28,7 @@ jobs:
 
       - name: Build .deb
         run: |
-          ./utils/make_deb.sh
+          ./utils/build_deb.sh
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
