@@ -24,6 +24,8 @@ extern void emlog_error_exit_codes(void** state);
 extern void emlog_log_errno_captures_context(void** state);
 extern void emlog_default_writer_stdout(void** state);
 extern void emlog_default_writer_stderr(void** state);
+extern void emlog_writer_receives_nul_terminated(void** state);
+extern void emlog_long_component_no_overread(void** state);
 
 int main(void)
 {
@@ -35,6 +37,8 @@ int main(void)
         cmocka_unit_test(emlog_error_from_errno),      cmocka_unit_test(emlog_error_name_strings),
         cmocka_unit_test(emlog_error_exit_codes),      cmocka_unit_test(emlog_log_errno_captures_context),
         cmocka_unit_test(emlog_default_writer_stdout), cmocka_unit_test(emlog_default_writer_stderr),
+        cmocka_unit_test(emlog_writer_receives_nul_terminated),
+        cmocka_unit_test(emlog_long_component_no_overread),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

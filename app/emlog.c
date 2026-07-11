@@ -562,8 +562,11 @@ static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
         for(int i = 0; i < iovcnt; ++i)
             total += iov[i].iov_len;
 
+        /* The public contract (emlog.h) promises the writer a NUL-terminated
+         * string of `n` bytes (no trailing newline). Reserve room for the '\0'.
+         */
         /* try stack allocate when small */
-        if(total <= 2048)
+        if(total < sizeof(char[2048]))   /* < 2048 leaves a byte for the NUL */
         {
             char   buf[2048];
             size_t off = 0;
@@ -572,12 +575,13 @@ static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
                 memcpy(buf + off, iov[i].iov_base, iov[i].iov_len);
                 off += iov[i].iov_len;
             }
+            buf[off] = '\0';
             (void)G.writer(level, buf, off, G.writer_ud);
             return;
         }
 
-        /* otherwise use heap */
-        char* buf = malloc(total);
+        /* otherwise use heap (+1 for the terminating NUL) */
+        char* buf = malloc(total + 1);
         if(!buf) return; /* if malloc fails, drop the line */
         size_t off = 0;
         for(int i = 0; i < iovcnt; ++i)
@@ -585,6 +589,7 @@ static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
             memcpy(buf + off, iov[i].iov_base, iov[i].iov_len);
             off += iov[i].iov_len;
         }
+        buf[off] = '\0';
         (void)G.writer(level, buf, off, G.writer_ud);
         free(buf);
         return;
@@ -735,7 +740,11 @@ static void _vlog(eml_level_t level, const char* comp, const char* fmt, va_list 
         G.use_ts
                  ? snprintf(head, sizeof head, "%s %s [%llu] [%s] ", ts, _level_to_string(level), (unsigned long long)tid, comp ? comp : "-")
                  : snprintf(head, sizeof head, "%s [%llu] [%s] ", _level_to_string(level), (unsigned long long)tid, comp ? comp : "-");
+    /* snprintf returns the length it WOULD have written; on truncation that is
+     * larger than the buffer. Clamp so the iovec length never runs past head[]
+     * (a long component name would otherwise read out of bounds). */
     if(hlen < 0) hlen = 0;
+    else if(hlen >= (int)sizeof head) hlen = (int)sizeof head - 1;
 
     /* Build iovec for header and message, then call _write_line_iov which
      * will choose an efficient path (writev or writer callback).

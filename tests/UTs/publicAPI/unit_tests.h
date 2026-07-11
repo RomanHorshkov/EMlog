@@ -35,6 +35,10 @@ void emlog_log_errno_captures_context(void** state);
 void emlog_default_writer_stdout(void** state);
 void emlog_default_writer_stderr(void** state);
 
+/* writer/header memory-safety tests (P1 fixes) */
+void emlog_writer_receives_nul_terminated(void** state);
+void emlog_long_component_no_overread(void** state);
+
 #ifdef __cplusplus
 }
 #endif
