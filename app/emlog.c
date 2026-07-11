@@ -566,7 +566,7 @@ static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
          * string of `n` bytes (no trailing newline). Reserve room for the '\0'.
          */
         /* try stack allocate when small */
-        if(total < sizeof(char[2048]))   /* < 2048 leaves a byte for the NUL */
+        if(total < sizeof(char[2048])) /* < 2048 leaves a byte for the NUL */
         {
             char   buf[2048];
             size_t off = 0;
@@ -743,8 +743,10 @@ static void _vlog(eml_level_t level, const char* comp, const char* fmt, va_list 
     /* snprintf returns the length it WOULD have written; on truncation that is
      * larger than the buffer. Clamp so the iovec length never runs past head[]
      * (a long component name would otherwise read out of bounds). */
-    if(hlen < 0) hlen = 0;
-    else if(hlen >= (int)sizeof head) hlen = (int)sizeof head - 1;
+    if(hlen < 0)
+        hlen = 0;
+    else if(hlen >= (int)sizeof head)
+        hlen = (int)sizeof head - 1;
 
     /* Build iovec for header and message, then call _write_line_iov which
      * will choose an efficient path (writev or writer callback).
