@@ -87,6 +87,36 @@ report_debs() {
     return 0
 }
 
+# Print per-file line/branch/function coverage from every coverage-summary.json
+# gcovr produced (public + private UT suites). Missing files (a failed UT
+# stage never reaches gcovr) are reported, not silently skipped.
+report_coverage() {
+    printf '\n%s== Coverage ==%s\n' "${c_bold}" "${c_rst}"
+    local any=0
+    local entry label path
+    for entry in \
+        "ut-public|${ROOT_DIR}/tests/results/public_UTs/coverage-summary.json" \
+        "ut-private|${ROOT_DIR}/tests/results/private_UTs/coverage-summary.json"
+    do
+        label="${entry%%|*}"; path="${entry#*|}"
+        if [[ -f "${path}" ]]; then
+            any=1
+            python3 - "${label}" "${path}" <<'PY'
+import json, sys
+label, path = sys.argv[1], sys.argv[2]
+with open(path) as fh:
+    d = json.load(fh)
+print(f"  {label:<10} line {d['line_percent']:5.1f}% ({d['line_covered']}/{d['line_total']})"
+      f"   branch {d['branch_percent']:5.1f}% ({d['branch_covered']}/{d['branch_total']})"
+      f"   func {d['function_percent']:5.1f}% ({d['function_covered']}/{d['function_total']})")
+for f in d["files"]:
+    print(f"    {f['filename']:<20} line {f['line_percent']:5.1f}%   branch {f['branch_percent']:5.1f}%   func {f['function_percent']:5.1f}%")
+PY
+        fi
+    done
+    (( any )) || printf '  no coverage-summary.json found (ut-public / ut-private did not complete)\n'
+}
+
 printf '%s\u2554\u2550\u2550 %s pipeline \u2550\u2550\u2550\u2550%s\n' "${c_bold}" "${PKG_LABEL}" "${c_rst}"
 
 stage "build"          bash "${SCRIPT_DIR}/build_libs.sh"
@@ -94,6 +124,8 @@ stage "ut-public"      bash "${SCRIPT_DIR}/make_UTs_pub.sh"
 stage "ut-private"     bash "${SCRIPT_DIR}/make_UTs_priv.sh"
 stage "integration"    bash "${SCRIPT_DIR}/make_ITs.sh"
 stage "package"        bash "${SCRIPT_DIR}/build_deb.sh"
+
+report_coverage
 
 report_debs || FAILED=1
 

@@ -56,7 +56,7 @@ Section: libs
 Priority: optional
 Architecture: $ARCH
 Maintainer: Roman Horshkov <https://github.com/RomanHorshkov>
-Description: EMlog personal library installed under /usr/local
+Description: Tiny thread-safe C logger with printf-style API and canonical errno mapping
 EOF
 
 # post installation script
