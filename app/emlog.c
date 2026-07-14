@@ -15,6 +15,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -96,11 +97,11 @@
  */
 static struct
 {
-    eml_level_t     min_level;    /**< Minimum level to emit */
+    _Atomic int     min_level;    /**< Minimum level to emit — atomic so the dropped-call fast path takes no lock */
     int             use_ts;       /**< Whether timestamps are enabled */
     pthread_mutex_t mutex;        /**< Mutex protecting the struct */
-    eml_writer_fn   writer;       /**< Optional custom writer */
-    void*           writer_ud;    /**< User data passed to writer */
+    eml_writer_fn   writer;       /**< Optional custom writer — REPLACED under g_emit_mutex, read under g_emit_mutex (see emlog_set_writer) */
+    void*           writer_ud;    /**< User data passed to writer — same discipline as writer */
     int             writev_flush; /**< Whether to fflush before writev */
     unsigned        init_gen;     /**< Counts successful init calls */
     int             initialized;  /**< Tracks whether init ran at least once */
@@ -287,8 +288,8 @@ void emlog_init(int min_level, bool timestamps)
     int new_use_ts = timestamps ? 1 : 0;
     int need_tz    = new_use_ts && (!G.initialized || !G.use_ts);
 
-    G.min_level = new_level;
-    G.use_ts    = new_use_ts;
+    atomic_store_explicit(&G.min_level, (int)new_level, memory_order_relaxed);
+    G.use_ts = new_use_ts;
     if(need_tz) tzset();
     G.initialized = 1;
     ++G.init_gen;
@@ -301,9 +302,7 @@ void emlog_set_level(eml_level_t min_level)
     /* Negative would enable levels that don't exist; clamp to DBG. Values
      * above CRIT are legitimate: they disable all output. */
     if((int)min_level < 0) min_level = EML_LEVEL_DBG;
-    pthread_mutex_lock(&G.mutex);
-    G.min_level = min_level;
-    pthread_mutex_unlock(&G.mutex);
+    atomic_store_explicit(&G.min_level, (int)min_level, memory_order_relaxed);
 }
 
 void emlog_enable_timestamps(bool on)
@@ -315,10 +314,21 @@ void emlog_enable_timestamps(bool on)
 
 void emlog_set_writer(eml_writer_fn fn, void* user)
 {
+    /* Synchronize with in-flight emission: the emit path reads writer/
+     * writer_ud only while holding g_emit_mutex, so once this returns no
+     * thread can invoke the OLD writer or touch the OLD context — the caller
+     * may reclaim it immediately (`emlog_set_writer(NULL, NULL); free(ctx);`
+     * is safe). When called from inside a writer callback this thread
+     * already holds g_emit_mutex (taking it again would self-deadlock);
+     * the swap is then sequenced within the callback and takes effect for
+     * every later line. */
+    int own_emit = !_emitting_tls;
+    if(own_emit) pthread_mutex_lock(&g_emit_mutex);
     pthread_mutex_lock(&G.mutex);
     G.writer    = fn;
     G.writer_ud = user;
     pthread_mutex_unlock(&G.mutex);
+    if(own_emit) pthread_mutex_unlock(&g_emit_mutex);
 }
 
 void emlog_set_writev_flush(bool on)
@@ -330,23 +340,28 @@ void emlog_set_writev_flush(bool on)
 
 void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
 {
+    /* Lock-free early drop: rejected lines cost one relaxed atomic load. */
+    if((int)level < atomic_load_explicit(&G.min_level, memory_order_relaxed)) return;
+
     /* A custom writer logging from inside its own callback would self-deadlock
      * on g_emit_mutex; drop the reentrant line (the outer line still emits). */
     if(_emitting_tls) return;
 
     log_cfg_t cfg;
+    cfg.min_level = (eml_level_t)atomic_load_explicit(&G.min_level, memory_order_relaxed);
     pthread_mutex_lock(&G.mutex);
-    cfg.min_level    = G.min_level;
     cfg.use_ts       = G.use_ts;
-    cfg.writer       = G.writer;
-    cfg.writer_ud    = G.writer_ud;
     cfg.writev_flush = G.writev_flush;
     pthread_mutex_unlock(&G.mutex);
 
-    if(level < cfg.min_level) return;
-
     _emitting_tls = 1;
     pthread_mutex_lock(&g_emit_mutex);
+    /* Writer identity + context are read ONLY under the emit lock: paired
+     * with emlog_set_writer taking the same lock, a replaced writer's
+     * context can never be used after set_writer returns (lifetime hole
+     * fixed in 1.2.0). */
+    cfg.writer    = G.writer;
+    cfg.writer_ud = G.writer_ud;
     va_list ap;
     va_start(ap, fmt);
     _vlog(&cfg, level, comp, fmt, ap);

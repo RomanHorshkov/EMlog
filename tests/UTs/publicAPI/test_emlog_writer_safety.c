@@ -6,12 +6,16 @@
  *          reads out of bounds (run under AddressSanitizer to catch the read).
  */
 
+#define _POSIX_C_SOURCE 200809L /* nanosleep, pthreads for the replacement-synchronization test */
+
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <cmocka.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "emlog.h"
 #include "unit_tests.h"
@@ -184,4 +188,98 @@ void emlog_reentrant_log_dropped(void** state)
     emlog_set_writer(NULL, NULL);
 
     assert_int_equal(g_called, 1); /* inner line dropped, no second callback */
+}
+
+/* ---- writer replacement must synchronize old-context lifetime ---- */
+
+static int g_slow_done; /* set by the slow writer as its LAST action */
+
+static ssize_t slow_ctx_writer(eml_level_t lvl, const char* line, size_t n, void* user)
+{
+    (void)lvl;
+    (void)line;
+    struct timespec delay = {.tv_sec = 0, .tv_nsec = 100 * 1000 * 1000}; /* 100 ms */
+    nanosleep(&delay, NULL);
+    volatile char c = *(char*)user; /* ASan flags this if the context was reclaimed early */
+    (void)c;
+    g_slow_done = 1;
+    return (ssize_t)n;
+}
+
+static void* log_one_line(void* arg)
+{
+    (void)arg;
+    EML_INFO("t", "line into the slow writer");
+    return NULL;
+}
+
+void emlog_writer_replacement_synchronizes(void** state)
+{
+    (void)state;
+    /* The 1.1.0 lifetime hole: emlog_set_writer returned immediately while a
+     * logging thread was still inside (or queued behind) the OLD callback, so
+     * `emlog_set_writer(NULL, NULL); free(ctx);` was a use-after-free. The
+     * fix routes replacement through the emit lock. Two assertions prove the
+     * lock is really taken:
+     *   - ordering: set_writer must return only AFTER the in-flight callback
+     *     finished (g_slow_done observed set);
+     *   - lifetime: freeing the context right after set_writer is ASan-clean. */
+    emlog_init(EML_LEVEL_DBG, false);
+
+    char* ctx = malloc(64);
+    assert_non_null(ctx);
+    memset(ctx, 0x5a, 64);
+
+    g_slow_done = 0;
+    emlog_set_writer(slow_ctx_writer, ctx);
+
+    pthread_t th;
+    assert_int_equal(pthread_create(&th, NULL, log_one_line, NULL), 0);
+
+    struct timespec settle = {.tv_sec = 0, .tv_nsec = 20 * 1000 * 1000}; /* 20 ms: callback is now sleeping inside emit */
+    nanosleep(&settle, NULL);
+
+    emlog_set_writer(NULL, NULL); /* must block until the callback returns */
+    assert_int_equal(g_slow_done, 1); /* the emission lock really exists */
+    free(ctx);                        /* safe by contract; ASan verifies */
+
+    assert_int_equal(pthread_join(th, NULL), 0);
+}
+
+/* ---- level edge semantics ---- */
+
+void emlog_level_above_crit_disables(void** state)
+{
+    (void)state;
+    /* CRIT+1 must genuinely disable output — not fall back to EMLOG_LEVEL. */
+    emlog_init(EML_LEVEL_DBG, false);
+    g_called = 0;
+    emlog_set_writer(capture_writer, NULL);
+
+    emlog_set_level((eml_level_t)(EML_LEVEL_CRIT + 1));
+    emlog_log(EML_LEVEL_CRIT, "comp", "must not appear");
+    assert_int_equal(g_called, 0);
+
+    /* same through emlog_init — the callback counts init's own line too */
+    emlog_init(EML_LEVEL_CRIT + 1, false);
+    emlog_log(EML_LEVEL_CRIT, "comp", "must not appear either");
+    assert_int_equal(g_called, 0);
+
+    emlog_set_writer(NULL, NULL);
+}
+
+void emlog_negative_level_clamped(void** state)
+{
+    (void)state;
+    /* A negative set_level must clamp to DBG (everything emits), not disable
+     * or enable phantom levels. */
+    emlog_init(EML_LEVEL_CRIT + 1, false); /* start silenced */
+    g_called = 0;
+    emlog_set_writer(capture_writer, NULL);
+
+    emlog_set_level((eml_level_t)-5);
+    emlog_log(EML_LEVEL_DBG, "comp", "dbg visible after clamp");
+    assert_int_equal(g_called, 1);
+
+    emlog_set_writer(NULL, NULL);
 }

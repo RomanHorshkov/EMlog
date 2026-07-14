@@ -30,6 +30,9 @@ extern void emlog_truncation_warning_no_overread(void** state);
 extern void emlog_huge_message_bounded(void** state);
 extern void emlog_writer_callback_may_reconfigure(void** state);
 extern void emlog_reentrant_log_dropped(void** state);
+extern void emlog_writer_replacement_synchronizes(void** state);
+extern void emlog_level_above_crit_disables(void** state);
+extern void emlog_negative_level_clamped(void** state);
 
 int main(void)
 {
@@ -47,6 +50,9 @@ int main(void)
         cmocka_unit_test(emlog_huge_message_bounded),
         cmocka_unit_test(emlog_writer_callback_may_reconfigure),
         cmocka_unit_test(emlog_reentrant_log_dropped),
+        cmocka_unit_test(emlog_writer_replacement_synchronizes),
+        cmocka_unit_test(emlog_level_above_crit_disables),
+        cmocka_unit_test(emlog_negative_level_clamped),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

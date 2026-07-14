@@ -45,6 +45,11 @@ void emlog_huge_message_bounded(void** state);
 void emlog_writer_callback_may_reconfigure(void** state);
 void emlog_reentrant_log_dropped(void** state);
 
+/* writer replacement lifetime + level edge semantics */
+void emlog_writer_replacement_synchronizes(void** state);
+void emlog_level_above_crit_disables(void** state);
+void emlog_negative_level_clamped(void** state);
+
 #ifdef __cplusplus
 }
 #endif

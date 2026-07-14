@@ -137,6 +137,12 @@ void emlog_enable_timestamps(bool on);
  *
  * Passing NULL for @p fn restores the default behavior which writes to stdout (info and below) and stderr (errors and above).
  *
+ * Lifetime guarantee: this call synchronizes with in-flight emission — it blocks until any currently running writer callback has returned,
+ * and after it returns no thread will invoke the previous writer or touch the previous @p user context again. Reclaiming the old context
+ * immediately after replacement (`emlog_set_writer(NULL, NULL); free(ctx);`) is therefore safe. Exception: when called from INSIDE a writer
+ * callback it cannot wait for itself; the swap still takes effect for every later line, but the executing callback's own context must stay
+ * alive until that callback returns.
+ *
  * @param fn Writer callback or NULL to restore default.
  * @param user User data pointer passed to the writer when invoked.
  */
