@@ -1,9 +1,6 @@
-EMLog — Minimal thread-safe logging and canonical error utilities
-===============================================================
+EMLog — Minimal thread-safe logging and canonical error utilities ===============================================================
 
-[![CI](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml)
-[![Coverage Workflow](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml)
-![license](https://img.shields.io/badge/license-MIT-informational)
+[![CI](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml) [![Coverage Workflow](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml) ![license](https://img.shields.io/badge/license-MIT-informational)
 
 Overview
 --------
