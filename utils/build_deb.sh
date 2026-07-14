@@ -10,6 +10,7 @@ set -euo pipefail
 
 ROOT_DIR="${ROOT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PKG_NAME="emlog"
+STRIP="${STRIP:-strip}"
 
 die() { printf '%s: %s\n' "${BASH_SOURCE[0]}" "$1" >&2; exit 1; }
 
@@ -37,13 +38,14 @@ mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/local/lib" "$STAGE/usr/local/include"
 install -m 0644 app/emlog.h "$STAGE/usr/local/include/emlog.h"
 
 install -m 0755 "build/release/libemlog.so.$VER" "$STAGE/usr/local/lib/libemlog.so.$VER"
+"$STRIP" --strip-unneeded "$STAGE/usr/local/lib/libemlog.so.$VER"
 ln -sf "libemlog.so.$VER" "$STAGE/usr/local/lib/libemlog.so.$MAJOR"
 ln -sf "libemlog.so.$VER" "$STAGE/usr/local/lib/libemlog.so"
 
 install -m 0644 build/release/libemlog.a "$STAGE/usr/local/lib/libemlog.a"
 
-# Gate the staged shared library: the deb payload must carry the hardening the
-# release profile promises. A hard failure aborts the package build.
+# Gate the staged, stripped shared library: the exact deb payload must carry
+# the hardening the release profile promises. A hard failure aborts the build.
 "${ROOT_DIR}/utils/check_hardening.sh" "$STAGE/usr/local/lib/libemlog.so.$VER"
 
 # Control file

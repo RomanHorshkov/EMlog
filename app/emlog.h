@@ -14,6 +14,7 @@
 #ifndef EMLOG_H
 #define EMLOG_H
 
+#include <errno.h> /* EML_PERR reads errno; consumers must not need to include it themselves */
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/types.h>
@@ -84,6 +85,13 @@ enum
  * If a writer is installed with emlog_set_writer(), the logger will call this function for each formatted line. The implementation should
  * return the number of bytes written on success or a negative value on failure.
  *
+ * Reentrancy rules: the callback runs with the emit lock held but NOT the configuration lock, so it MAY call emlog_set_level(),
+ * emlog_set_writer(), emlog_enable_timestamps() and emlog_set_writev_flush(). Calling emlog_log() (or the EML_* macros) from inside the
+ * callback does not deadlock — the reentrant line is silently dropped. A writer that blocks stalls every logging thread (emission is
+ * serialized) but never configuration calls.
+ *
+ * Lifetime: @p line points into logger-owned static storage and is valid only for the duration of the callback — copy it out if needed.
+ *
  * @param lvl Log level for the line.
  * @param line Pointer to a NUL-terminated string (not including trailing \n).
  * @param n Number of bytes in @p line (excluding trailing \0).
@@ -96,12 +104,13 @@ typedef ssize_t (*eml_writer_fn)(eml_level_t lvl, const char* line, size_t n, vo
  * @brief Initialize the global logger state.
  *
  * This must be called early if you want to set a non-default minimum level or disable timestamps. If @p min_level is negative the current
- * value of the EMLOG_LEVEL environment variable will be parsed and used (accepted values: debug, info, warn, error, crit).
+ * value of the EMLOG_LEVEL environment variable will be parsed and used (accepted values: debug, info, warn, error, crit). A value above
+ * EML_LEVEL_CRIT disables all output (no level can reach it) — useful for benchmarks and silent operation.
  *
  * Calling emlog_init() multiple times is safe; each invocation replaces the previous configuration (the most recent call "wins"), which
  * allows different subsystems to reconfigure the logger without tearing down internal state.
  *
- * @param min_level Minimum level to emit (or negative to read EMLOG_LEVEL).
+ * @param min_level Minimum level to emit; negative to read EMLOG_LEVEL; above EML_LEVEL_CRIT to disable all output.
  * @param timestamps Enable ISO8601 timestamps when true.
  */
 void emlog_init(int min_level, bool timestamps);
@@ -109,7 +118,8 @@ void emlog_init(int min_level, bool timestamps);
 /**
  * @brief Set the current runtime minimum log level.
  *
- * Messages with level lower than @p min_level will be dropped.
+ * Messages with level lower than @p min_level will be dropped. A value above EML_LEVEL_CRIT disables all output; a negative value is
+ * clamped to EML_LEVEL_DBG.
  *
  * @param min_level New minimum level.
  */
@@ -135,9 +145,9 @@ void emlog_set_writer(eml_writer_fn fn, void* user);
 /**
  * @brief Control whether the logger flushes stdio buffers before using writev.
  *
- * When true (default) the logger will call fflush() on the destination FILE* before issuing a writev() syscall. This avoids interleaving
- * when other code may be using stdio on the same stream (safe but slower). When false the logger will write directly via writev() (faster
- * but may interleave with stdio-buffered output).
+ * Default is DISABLED (fastest path). When enabled the logger calls fflush() on the destination FILE* before issuing the writev() syscall,
+ * which reduces — but cannot fully eliminate — interleaving with other code using stdio on the same stream (another thread can still write
+ * between the flush and the writev). When disabled the logger writes directly via writev() and may interleave with stdio-buffered output.
  */
 void emlog_set_writev_flush(bool on);
 
@@ -159,9 +169,10 @@ void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...) __attr
 /**
  * @brief Log a message that includes formatted errno text.
  *
- * This composes the formatted message from @p fmt and appends the strerror() text for @p err. It is safe to call from signal handlers as
- * long as the C library implementations used are async-signal-safe for the invoked routines (most are not); prefer using it from normal
- * code.
+ * This composes the formatted message from @p fmt and appends the strerror() text for @p err.
+ *
+ * @warning NOT async-signal-safe (mutexes, vsnprintf, localtime and writer callbacks are involved) — never call any EMlog function from a
+ * signal handler.
  *
  * @param level Log level.
  * @param comp Optional component/tag.

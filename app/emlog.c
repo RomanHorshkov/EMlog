@@ -89,7 +89,10 @@
  */
 
 /**
- * @brief Global logger state.
+ * @brief Global logger configuration. G.mutex protects ONLY this struct
+ *        (setters + the per-call snapshot in emlog_log) and is never held
+ *        while formatting or invoking a writer — so a custom writer callback
+ *        may safely call emlog_set_level()/emlog_set_writer()/etc.
  */
 static struct
 {
@@ -111,6 +114,51 @@ static struct
        .writev_flush = 0,
        .init_gen     = 0,
        .initialized  = 0};
+
+/**
+ * @brief Per-call snapshot of G, taken under G.mutex, used lock-free for the
+ *        rest of the emit so config mutation can never race the write path.
+ */
+typedef struct
+{
+    eml_level_t   min_level;
+    int           use_ts;
+    eml_writer_fn writer;
+    void*         writer_ud;
+    int           writev_flush;
+} log_cfg_t;
+
+/**
+ * @brief Serializes formatting + emission (line ordering and the static emit
+ *        buffers below). Separate from G.mutex by design: a slow or blocked
+ *        writer stalls other LOGGING threads but never configuration calls.
+ */
+static pthread_mutex_t g_emit_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/**
+ * @brief Reentry guard: set while this thread is inside the emit path. A
+ *        custom writer logging from its own callback would self-deadlock on
+ *        g_emit_mutex — reentrant lines are dropped instead. (Without TLS
+ *        support this degrades to a global flag: reentry protection stays
+ *        correct, but other threads' lines may be dropped while a writer
+ *        callback runs.)
+ */
+EML_THREAD_LOCAL static int _emitting_tls = 0;
+
+/**
+ * @brief Message-format buffer, owned by g_emit_mutex. The emitted line is
+ *        hard-capped at LOG_MAX_WRITE, so formatting directly into bounded
+ *        static storage replaces the old malloc-then-truncate path: the
+ *        logger performs no heap allocation on any path.
+ */
+static char g_msgbuf[LOG_MAX_WRITE];
+
+/**
+ * @brief Contiguous-line assembly buffer for custom writers, owned by
+ *        g_emit_mutex. _vlog guarantees header+message <= LOG_MAX_WRITE - 1,
+ *        leaving room for the terminating NUL the writer contract promises.
+ */
+static char g_linebuf[LOG_MAX_WRITE];
 
 /*****************************************************************************************************************************************
  * MARK: PRIVATE VARIABLES DEFINITIONS
@@ -197,22 +245,22 @@ static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out);
 /**
  * @brief Write a log line given as an iovec array.
  *
- * A variant of write_line that accepts an iovec array. On POSIX platforms (Linux) we use writev() to write header+message+"\n" in a single
- * syscall, avoiding a temporary allocation. If a custom writer is installed we fall back to calling the writer with a contiguous buffer
- * (constructed on the stack when small, or via malloc when necessary).
+ * On POSIX platforms (Linux) we use writev() to write header+message+"\n" in a single syscall. If a custom writer is installed the line is
+ * assembled into g_linebuf (serialized by g_emit_mutex, never heap) and handed over NUL-terminated per the emlog.h contract.
  */
-static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt);
+static void _write_line_iov(const log_cfg_t* cfg, eml_level_t level, struct iovec* iov, int iovcnt);
 
-/** @brief Core varargs logger implementation (expects mutex to be held).
+/** @brief Core varargs logger implementation (expects g_emit_mutex to be held).
  *
- * Formats and emits a log line if the level is >= current min_level.
+ * Formats and emits a log line. Level filtering already happened in emlog_log against the same snapshot.
  *
+ * @param cfg  Config snapshot taken under G.mutex
  * @param level Log level
  * @param comp Component name (nullable)
  * @param fmt Printf-style format string
  * @param ap   va_list of arguments
  */
-static void _vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap);
+static void _vlog(const log_cfg_t* cfg, eml_level_t level, const char* comp, const char* fmt, va_list ap);
 
 /*****************************************************************************************************************************************
  * MARK: PUBLIC FUNCTIONS DEFINITIONS
@@ -223,8 +271,12 @@ void emlog_init(int min_level, bool timestamps)
 {
     pthread_mutex_lock(&G.mutex);
     eml_level_t new_level;
-    if(min_level < 0 || min_level > EML_LEVEL_CRIT)
+    if(min_level < 0)
     {
+        /* Negative (and only negative) means "read EMLOG_LEVEL from the
+         * environment" — the documented contract. A value above CRIT is a
+         * deliberate "disable all output" request (nothing can reach it),
+         * so it is stored as-is, never silently rerouted to the env. */
         const char* env = getenv("EMLOG_LEVEL");
         new_level       = _string_to_level(env);
     }
@@ -246,6 +298,9 @@ void emlog_init(int min_level, bool timestamps)
 
 void emlog_set_level(eml_level_t min_level)
 {
+    /* Negative would enable levels that don't exist; clamp to DBG. Values
+     * above CRIT are legitimate: they disable all output. */
+    if((int)min_level < 0) min_level = EML_LEVEL_DBG;
     pthread_mutex_lock(&G.mutex);
     G.min_level = min_level;
     pthread_mutex_unlock(&G.mutex);
@@ -275,12 +330,29 @@ void emlog_set_writev_flush(bool on)
 
 void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
 {
+    /* A custom writer logging from inside its own callback would self-deadlock
+     * on g_emit_mutex; drop the reentrant line (the outer line still emits). */
+    if(_emitting_tls) return;
+
+    log_cfg_t cfg;
     pthread_mutex_lock(&G.mutex);
+    cfg.min_level    = G.min_level;
+    cfg.use_ts       = G.use_ts;
+    cfg.writer       = G.writer;
+    cfg.writer_ud    = G.writer_ud;
+    cfg.writev_flush = G.writev_flush;
+    pthread_mutex_unlock(&G.mutex);
+
+    if(level < cfg.min_level) return;
+
+    _emitting_tls = 1;
+    pthread_mutex_lock(&g_emit_mutex);
     va_list ap;
     va_start(ap, fmt);
-    _vlog(level, comp, fmt, ap);
+    _vlog(&cfg, level, comp, fmt, ap);
     va_end(ap);
-    pthread_mutex_unlock(&G.mutex);
+    pthread_mutex_unlock(&g_emit_mutex);
+    _emitting_tls = 0;
 }
 
 void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* fmt, ...)
@@ -553,45 +625,25 @@ static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
     if(msec_out) *msec_out = ms;
 }
 
-static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
+static void _write_line_iov(const log_cfg_t* cfg, eml_level_t level, struct iovec* iov, int iovcnt)
 {
-    if(G.writer)
+    if(cfg->writer)
     {
-        /* custom writer: needs a contiguous buffer; assemble quickly */
-        size_t total = 0;
-        for(int i = 0; i < iovcnt; ++i)
-            total += iov[i].iov_len;
-
-        /* The public contract (emlog.h) promises the writer a NUL-terminated
-         * string of `n` bytes (no trailing newline). Reserve room for the '\0'.
-         */
-        /* try stack allocate when small */
-        if(total < sizeof(char[2048])) /* < 2048 leaves a byte for the NUL */
-        {
-            char   buf[2048];
-            size_t off = 0;
-            for(int i = 0; i < iovcnt; ++i)
-            {
-                memcpy(buf + off, iov[i].iov_base, iov[i].iov_len);
-                off += iov[i].iov_len;
-            }
-            buf[off] = '\0';
-            (void)G.writer(level, buf, off, G.writer_ud);
-            return;
-        }
-
-        /* otherwise use heap (+1 for the terminating NUL) */
-        char* buf = malloc(total + 1);
-        if(!buf) return; /* if malloc fails, drop the line */
+        /* Custom writer: contiguous NUL-terminated line per the emlog.h
+         * contract, assembled into g_linebuf (we hold g_emit_mutex). _vlog
+         * guarantees the line fits LOG_MAX_WRITE - 1; the clamp below is a
+         * defensive truncation, never an over-read. */
         size_t off = 0;
         for(int i = 0; i < iovcnt; ++i)
         {
-            memcpy(buf + off, iov[i].iov_base, iov[i].iov_len);
-            off += iov[i].iov_len;
+            size_t len   = iov[i].iov_len;
+            size_t space = sizeof(g_linebuf) - 1 - off;
+            if(len > space) len = space;
+            memcpy(g_linebuf + off, iov[i].iov_base, len);
+            off += len;
         }
-        buf[off] = '\0';
-        (void)G.writer(level, buf, off, G.writer_ud);
-        free(buf);
+        g_linebuf[off] = '\0';
+        (void)cfg->writer(level, g_linebuf, off, cfg->writer_ud);
         return;
     }
 
@@ -605,7 +657,7 @@ static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
     /* If configured, flush stdio buffers to avoid interleaving with other
      * code that may be using stdio on the same stream (safer but slower).
      */
-    if(G.writev_flush) fflush(out);
+    if(cfg->writev_flush) fflush(out);
     /* prepare newline iovec */
     char         nl = '\n';
     struct iovec local_iov[16];
@@ -630,77 +682,23 @@ static void _write_line_iov(eml_level_t level, struct iovec* iov, int iovcnt)
 #endif
 }
 
-static void _vlog(eml_level_t level, const char* comp, const char* fmt, va_list ap)
+static void _vlog(const log_cfg_t* cfg, eml_level_t level, const char* comp, const char* fmt, va_list ap)
 {
     /*
-     * -----------------------------------------------------------------
-     * _vlog - the core, varargs logger implementation
-     * -----------------------------------------------------------------
+     * The core emit path. Runs under g_emit_mutex (owner of g_msgbuf and
+     * g_linebuf); reads configuration only through the cfg snapshot, never
+     * through G, so a concurrent setter can't race it.
      *
-     * This function is the heart of the logging pipeline. It is invoked with the global mutex held (emlog_log acquires G.mutex before
-     * calling into here), so the implementation can safely read and write global state without additional synchronization. The function is
-     * carefully designed to avoid heap allocations for common short messages while supporting arbitrarily long messages via a heap fallback
-     * path.
-     *
-     * Step-by-step behavior (annotated):
-     * 1) Level filtering: if the provided level is below G.min_level,
-     *    drop the message immediately and return. This is an important
-     *    early-out to avoid any formatting work for messages that would
-     *    be discarded.
-     *
-     * 2) Timestamp formatting: if timestamps are enabled (G.use_ts), we
-     *    call _fmt_time_iso8601 to produce an ISO8601 timestamp string.
-     *    The implementation of _fmt_time_iso8601 uses a per-second cache
-     *    to avoid expensive localtime/strftime operations in the hot
-     *    path. _fmt_time_iso8601 also returns milliseconds which could be
-     *    used if desired by callers (currently unused beyond storage).
-     *
-     * 3) Message formatting: we first attempt to format the message into
-     *    a stack-allocated buffer (stackbuf[1024]). This avoids heap
-     *    allocations for the common case where formatted messages are
-     *    small. We use vsnprintf twice if needed:
-     *      - First pass to compute the required size (`need`).
-     *      - If `need` >= sizeof(stackbuf) we allocate `need+1` bytes on
-     *        the heap, re-run vsnprintf to fill it, and use that as the
-     *        message. If malloc fails we fall back to the truncated
-     *        stack buffer contents.
-     *
-     * 4) Header composition: we build a small header containing either
-     *    "<ts> <lvl> [tid] [comp] " when timestamps are enabled, or
-     *    "<lvl> [tid] [comp] " without timestamps. The thread id is
-     *    acquired via _get_thread_id() which returns a numeric identifier
-     *    suitable for human-readable logs.
-     *
-     * 5) Single-allocation line assembly: to ensure the writer sees a
-     *    contiguous line we allocate a buffer of size header+msg and
-     *    memcpy both pieces into it, NUL-terminate, and pass it to
-     *    write_line. If allocation fails we degrade gracefully by
-     *    writing the header and message separately (two writes).
-     *
-     * 6) Cleanup: free any heap memory allocated for the message or
-     *    composed line.
-     *
-     * Important design and safety notes:
-     * - The global mutex prevents concurrent modification of writer and
-     *   configuration. Writers must be careful if invoked reentrantly.
-     * - We intentionally do not propagate writer errors back to the
-     *   caller - logging is best-effort.
-     * - This function is conservative about stack usage: the stackbuf
-     *   size (1024) is a compromise between avoiding heap use and not
-     *   growing stack frames too much.
-     *
-     * Potential micro-optimizations (documented for future work):
-     * - Avoid single allocation for the full line by using writev(2) on
-     *   platforms where it's available and safe: header+msg could be
-     *   written atomically to a FD. That would avoid the malloc/free
-     *   for the assembled line.
-     * - Support a per-thread scratch buffer to avoid frequent small
-     *   heap mallocs when messages are slightly larger than stackbuf.
+     * Embedded discipline: the emitted line is hard-capped at LOG_MAX_WRITE
+     * (atomic pipe write size), so the message is formatted DIRECTLY into
+     * bounded static storage. Anything longer is truncated with a "..."
+     * marker plus a follow-up TRUNCATED notice — the logger never sizes
+     * storage from its input, and never touches the heap.
      */
-    if(level < G.min_level) return;
+    if(level < cfg->min_level) return;
 
     char ts[40] = {0};
-    if(G.use_ts)
+    if(cfg->use_ts)
     {
         unsigned dummy_ms;
         _fmt_time_iso8601(ts, sizeof ts, &dummy_ms);
@@ -708,36 +706,32 @@ static void _vlog(eml_level_t level, const char* comp, const char* fmt, va_list 
 
     va_list ap2;
     va_copy(ap2, ap);
-    char stackbuf[1024];
-    int  need = vsnprintf(stackbuf, sizeof stackbuf, fmt, ap2);
+    int need = vsnprintf(g_msgbuf, sizeof g_msgbuf, fmt, ap2);
     va_end(ap2);
 
-    char*  msg    = stackbuf;
-    size_t msglen = (need < 0) ? 0 : (size_t)need;
-    char*  heap   = NULL;
-
-    if(need >= (int)sizeof stackbuf)
+    char*  msg    = g_msgbuf;
+    size_t msglen;
+    if(need < 0)
     {
-        heap = (char*)malloc((size_t)need + 1);
-        if(heap)
-        {
-            va_list ap3;
-            va_copy(ap3, ap);
-            vsnprintf(heap, (size_t)need + 1, fmt, ap3);
-            va_end(ap3);
-            msg = heap;
-        }
-        else
-        {
-            msg    = stackbuf;
-            msglen = sizeof stackbuf - 1;
-        }
+        msglen = 0;
+    }
+    else if((size_t)need >= sizeof g_msgbuf)
+    {
+        /* vsnprintf wanted more than the atomic-write cap: it already wrote
+         * a truncated, NUL-terminated prefix — exactly what we can emit.
+         * (header + this always exceeds LOG_MAX_WRITE, so the truncation
+         * block below fires and appends the "..." marker + notice.) */
+        msglen = sizeof g_msgbuf - 1;
+    }
+    else
+    {
+        msglen = (size_t)need;
     }
 
     char     head[128];
     uint64_t tid = _get_thread_id();
     int      hlen =
-        G.use_ts
+        cfg->use_ts
                  ? snprintf(head, sizeof head, "%s %s [%llu] [%s] ", ts, _level_to_string(level), (unsigned long long)tid, comp ? comp : "-")
                  : snprintf(head, sizeof head, "%s [%llu] [%s] ", _level_to_string(level), (unsigned long long)tid, comp ? comp : "-");
     /* snprintf returns the length it WOULD have written; on truncation that is
@@ -815,21 +809,27 @@ static void _vlog(eml_level_t level, const char* comp, const char* fmt, va_list 
             }
         }
         /* emit truncated line */
-        _write_line_iov(level, iov, iovcnt);
+        _write_line_iov(cfg, level, iov, iovcnt);
         /* emit a small warning about truncation (low verbosity):
          * "TRUNCATED: <lvl> <comp> ..."
          */
-        char         warnbuf[128];
-        int          w = snprintf(warnbuf, sizeof warnbuf, "TRUNCATED: %s [%llu] [%s]", _level_to_string(level), (unsigned long long)tid,
-                         comp ? comp : "-");
+        char warnbuf[128];
+        int  w = snprintf(warnbuf, sizeof warnbuf, "TRUNCATED: %s [%llu] [%s]", _level_to_string(level), (unsigned long long)tid,
+                          comp ? comp : "-");
+        /* snprintf returns the length it WOULD have written; on truncation
+         * (a long component name) that is larger than warnbuf — clamp so the
+         * iovec never reads past the buffer (same class as the head[] clamp). */
+        if(w < 0)
+            w = 0;
+        else if(w >= (int)sizeof warnbuf)
+            w = (int)sizeof warnbuf - 1;
         struct iovec wiov[1];
         wiov[0].iov_base = warnbuf;
-        wiov[0].iov_len  = (w > 0) ? (size_t)w : 0;
-        if(wiov[0].iov_len > 0) _write_line_iov(level, wiov, 1);
+        wiov[0].iov_len  = (size_t)w;
+        if(wiov[0].iov_len > 0) _write_line_iov(cfg, level, wiov, 1);
     }
     else
     {
-        _write_line_iov(level, iov, iovcnt);
+        _write_line_iov(cfg, level, iov, iovcnt);
     }
-    free(heap);
 }

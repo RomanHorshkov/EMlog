@@ -39,6 +39,12 @@ void emlog_default_writer_stderr(void** state);
 void emlog_writer_receives_nul_terminated(void** state);
 void emlog_long_component_no_overread(void** state);
 
+/* truncation-warning over-read, bounded formatting, writer reentrancy */
+void emlog_truncation_warning_no_overread(void** state);
+void emlog_huge_message_bounded(void** state);
+void emlog_writer_callback_may_reconfigure(void** state);
+void emlog_reentrant_log_dropped(void** state);
+
 #ifdef __cplusplus
 }
 #endif
