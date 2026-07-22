@@ -92,7 +92,7 @@ Coverage outputs:
 - `tests/results/UTs_all/UTs_all_coverage.xml`
 - `tests/results/UTs_all/coverage-summary.json`
 
-CI (`quality.yml`) runs the same scripts, plus compiler-portability (gcc + clang, `-Werror`), ASan/UBSan/LSan, ThreadSanitizer, and a package build/install/smoke-test stage. `security.yml` runs CodeQL and GCC's `-fanalyzer` on every push, PR, and weekly on a schedule.
+CI (`quality.yml`) runs the same scripts, plus compiler-portability (gcc + clang, `-Werror`), ASan/UBSan/LSan, ThreadSanitizer, and a package build/install/smoke-test stage. `security.yml` runs GCC's `-fanalyzer` on every push, PR, and weekly on a schedule.
 
 Usage
 -----
