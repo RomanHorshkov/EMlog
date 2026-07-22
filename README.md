@@ -1,153 +1,107 @@
-EMLog — Minimal thread-safe logging and canonical error utilities ===============================================================
+EMLog — Minimal thread-safe logging and canonical error utilities
+===================================================================
 
-[![CI](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/ci.yml) [![Coverage Workflow](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/coverage.yml) ![license](https://img.shields.io/badge/license-MIT-informational)
+[![Quality](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml)
+[![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml)
+[![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml)
+[![Latest Tag](https://img.shields.io/github/v/tag/RomanHorshkov/EMlog?sort=semver)](https://github.com/RomanHorshkov/EMlog/tags)
+[![License: MIT](https://img.shields.io/github/license/RomanHorshkov/EMlog)](./LICENSE)
 
 Overview
 --------
 
-EMLog is a compact, thread-safe logging and error categorization library written in C. It provides a tiny, easy-to-embed logging API with a small footprint and predictable behaviour under heavy concurrency.
+EMLog is a compact, thread-safe logging and error-categorization library written in C. It provides a tiny, easy-to-embed logging API with a small footprint, a fixed set of canonical error categories mapped from `errno`, and predictable behaviour under heavy concurrency.
 
-This repository contains the original library plus a set of targeted performance and robustness improvements implemented on the `adjustments` branch. The README below documents the library API, the performance improvements that were made, how to run the test and stress harness, and the profiling results collected while optimizing the hot path.
+Why EMLog?
+----------
 
-Files
+- Thread-safe by construction: a custom writer can be installed and swapped safely across concurrent logging calls.
+- No hot-path heap allocations: log lines are emitted with a single `writev(2)` against a header/message iovec pair, not a malloc'd buffer.
+- Cheap timestamps: ISO8601 prefixes are cached per-thread, per-second in TLS; only the millisecond suffix is recomputed on every call.
+- Pipe-safe by default: messages are truncated to respect `PIPE_BUF` so a single `write` never tears across readers.
+- Canonical error categories: every POSIX `errno` maps to one of a small, stable set of `eml_err_t` values, so callers can branch on category instead of raw errno.
+
+Project layout
+--------------
+
+- `app/emlog.h` — public API, fully documented with Doxygen comments.
+- `app/emlog.c` — implementation (writer dispatch, timestamp cache, `errno` categorization).
+- `tests/UTs/privateAPI/`, `tests/UTs/publicAPI/` — cmocka-based unit tests (white-box + black-box).
+- `tests/ITs/integration_test.c` — multithreaded integration/stress harness.
+- `utils/` — build, packaging, test, coverage, and hardening scripts.
+- `VERSION` — library version (`MAJOR.MINOR.PATCH`), also the release-tag source of truth.
+
+Build
 -----
 
-- `app/emlog.h` — Public API and documentation (Doxygen comments).
-- `app/emlog.c` — Implementation (timestamp caching, writev emission, truncation, etc.).
-- `VERSION` — Library version (`MAJOR.MINOR.PATCH`).
-- `tests/unit/*.c`      — cmocka-based unit tests that back the GitHub Actions suites.
-- `tests/integration/`  — Multithreaded / integration harnesses (formerly `stress.c`).
-- `utils/*.sh`          — Helper scripts (tests/coverage or legacy CMake flows, depending on branch/work-in-progress).
-
-Building
---------
 Everything you need to build/run is in `utils/`.
 
 | Script | Purpose |
 | ------ | ------- |
-| `utils/build_libs.sh [profile …]` | Build `libemlog.so.<VERSION>` + `libemlog.a` per profile into `build/<profile>/` (default: debug audit sanitize release); release artifacts are gated by `check_hardening.sh`. |
-| `utils/make_UTs_pub.sh` / `make_UTs_priv.sh` / `make_UTs_all.sh` | Build + run the public / private / all unit tests. |
-| `utils/make_ITs.sh` | Build + run the integration test. |
-| `utils/run_pipeline.sh` | The full board: libs → unit tests → integration → deb. |
+| `utils/build_libs.sh [profile ...]` | Build `libemlog.so.<VERSION>` + `libemlog.a` per profile into `build/<profile>/` (default: debug audit sanitize release); release artifacts are gated by `check_hardening.sh`. |
+| `utils/make_UTs_pub.sh` / `make_UTs_priv.sh` / `make_UTs_all.sh` | Build + run the public / private / combined-coverage unit tests. |
+| `utils/make_UTs_release.sh` | Private + public UTs built against the release profile, real assertions. |
+| `utils/make_ITs.sh` | Build + run the multithreaded integration test. |
+| `utils/make_sanitizer_tests.sh` | UTs + IT under ASan/UBSan/LSan. |
+| `utils/make_tsan_tests.sh` | The integration test under ThreadSanitizer. |
 | `utils/build_deb.sh` | Release Debian package + `SHA256SUMS` (VERSION-validated, hardening-checked). |
-| `utils/check_hardening.sh` | readelf assertions on built ELFs (full RELRO, NX stack, …). |
-| `utils/gcc_build_profiles.sh` | The shared profile catalog — synced from `Utils/compilation/`, never edited here. |
+| `utils/smoke_test_package.sh` | Compiles against the *installed* `/usr/local` package, never the repo build tree. |
+| `utils/check_hardening.sh` | `readelf` assertions on built ELFs (full RELRO, NX stack, stack canary, …). |
+| `utils/run_pipeline.sh` | The full board, end to end: libs → unit tests → integration → deb. |
 
-Running tests
--------------
+Artifacts:
 
-```bash
-./utils/run_tests.sh
+```sh
+./utils/build_libs.sh
 ```
 
-Coverage (CI)
----------------
+- `build/release/libemlog.a`
+- `build/release/libemlog.so.<VERSION>`
 
-This repository includes a GitHub Actions workflow (`.github/workflows/coverage.yml`) that drives the `utils/gen_coverage.sh` helper. The workflow configures a dedicated coverage build, runs the cmocka unit suite under instrumentation, and uploads the resulting HTML/XML/JSON artifacts so you can download or wire them into any external reporting service you prefer.
+Release process
+----------------
 
-Key artifacts produced by the CI (and available for download from the workflow run):
+Releases are tag-driven. See [RELEASING.md](./RELEASING.md) for the exact
+merge, tag, and publish flow.
 
-- `tests/results/UT_coverage.html` — full HTML report with per-file details (preferred to open in the browser).
-- `tests/results/UT_coverage.xml`  — XML report suitable for CI parsers.
-- `tests/results/coverage-summary.json` — machine-readable summary from `gcovr --json-summary`.
-- `tests/results/coverage-percent.txt`  — single line value used to feed the badge/pipeline gates.
+Testing
+-------
 
-How to view coverage locally
+Requirements (Ubuntu/Debian):
 
-1. Run the instrumented tests and generate the report using the helper script (mirrors CI behaviour):
-
-```bash
-./utils/gen_coverage.sh
-# open tests/results/UT_coverage.html in your browser
+```sh
+sudo apt install libcmocka-dev gcovr
 ```
 
-The CI also writes the overall percentage into `tests/results/coverage-percent.txt`, making it easy to hook up an external coverage service (Codecov, Coveralls, shields.io endpoint, etc.) whenever you feel like it—no additional plumbing is active right now.
+Run everything:
 
-New / Changed behaviour (adjustments branch)
---------------------------------------------
-
-This project contains a set of defensive, low-risk performance changes focused on reducing per-log allocations and system calls in high-throughput scenarios. Key changes:
-
-- One-time timezone initialization: `tzset()` is now called from `emlog_init()` (only when timestamps are enabled). This moves the lazy libc timezone file parsing out of the hot path and into startup.
-
-- Per-thread, per-second timestamp cache: the time formatter used for ISO8601 timestamps now caches the formatted prefix for the current second in thread-local storage (TLS). If multiple log lines are emitted within the same second, the cached prefix is reused and only the millisecond portion is appended. This reduces calls to `localtime_r()` and `strftime()` on the hot path.
-
-- writev-based emission: `vlog()` no longer concatenates header + message into a single malloc'd buffer on the heap. Instead it builds an iovec array (header iov + message iov) and emits them with a single `writev(2)` syscall when using the default FD-based writer. This avoids an extra heap allocation and reduces syscalls.
-
-- Truncation to respect pipe atomicity: to preserve atomic writes to pipes and to limit writer work, the logger will truncate extremely long messages so that a single write does not exceed `LOG_MAX_WRITE` (based on `PIPE_BUF` when available, fallback 4096). When truncation occurs a short `TRUNCATED` notice line is emitted.
-
-- writev flush control: mixing stdio buffered streams and direct FD writes can be unsafe unless the stdio buffer is flushed. A new API `emlog_set_writev_flush(bool on)` lets callers opt-in to calling `fflush()` before `writev` (slower but safe if other stdio writers are used). Default behaviour is the fastest (no fflush).
-
-Public API additions (adjustments)
----------------------------------
-
-- `void emlog_set_writev_flush(bool on);` — enable/disable fflush-before-writev behaviour.
-
-Why these changes?
-------------------
-
-Profiling with Valgrind Massif showed repeated heap work coming from libc timezone parsing (tzset / tzfile) when timestamps were enabled in the logger. That work happened lazily inside libc and showed up during logging at scale. Moving `tzset()` to init, caching formatted timestamps per-thread per-second, and avoiding per-message heap allocations significantly reduced both heap churn and syscall load.
-
-Stress harness and profiling
----------------------------
-
-This repo includes `tests/integration/integration_test.c` which builds to `emlog_integration_test` and can be used to exercise the logger under heavy concurrent load. Build it via CMake (`cmake --build build --target emlog_integration_test`) or with the legacy Makefile target if you prefer.
-
-Example: run 10 threads × 1000 messages (10k messages), redirect output to `/dev/null` and record elapsed time (the included wrapper scripts may be used):
-
-```bash
-# Build
-make
-
-# Run stress/integration (10 threads, 1000 messages each)
-./build/tests/emlog_integration_test 10 1000
-
-# The harness writes a short summary to /tmp/emlog_stress_result.txt
-cat /tmp/emlog_stress_result.txt
+```sh
+./utils/run_pipeline.sh
 ```
 
-Example measured result from a run used during development:
+Or individually:
 
+```sh
+./utils/make_UTs_all.sh   # unit tests + coverage
+./utils/make_ITs.sh       # integration test
 ```
-threads=10 msgs=1000 elapsed=1.222275
-```
 
-This means 10,000 messages were emitted in ~1.222s (≈8.2k messages/sec total).
+Coverage outputs:
 
-Valgrind / Massif summary collected
----------------------------------
+- `tests/results/UTs_all/UTs_all_coverage.html`
+- `tests/results/UTs_all/UTs_all_coverage.xml`
+- `tests/results/UTs_all/coverage-summary.json`
 
-Massif findings (representative run):
+CI (`quality.yml`) runs the same scripts, plus compiler-portability (gcc + clang, `-Werror`), ASan/UBSan/LSan, ThreadSanitizer, and a package build/install/smoke-test stage. `security.yml` runs CodeQL and GCC's `-fanalyzer` on every push, PR, and weekly on a schedule.
 
-- Peak total heap usage ~15 KiB; useful-heap attributed ~3 KiB at peak.
-- The largest heap contributions were thread/TLS and stack allocation at thread startup (pthread_create -> allocate_stack -> _dl_allocate_tls). After the `tzset()` + caching changes there were no repeated libc timezone allocations on the hot path.
-
-Valgrind Memcheck results (representative run):
-
-- All heap allocations were freed at process exit; no leaks reported.
-- No invalid memory read/write errors were detected.
-
-Usage notes and caveats
-----------------------
-
-- If your program mixes other stdio (fwrite/fprintf) calls to the same `stdout`/`stderr` FILE* concurrently with the logger's default `writev` path, you must either:
-  - Call `emlog_set_writev_flush(true)` to flush stdio before writev (safer, slightly slower), or
-  - Ensure the rest of the program writes only via the same logger writer callback to avoid interleaved output.
-
-- The truncation behaviour was introduced to preserve pipe atomicity (single writes <= PIPE_BUF). Tests were relaxed to accept truncated lines for extremely long messages; for most applications the truncation will not trigger.
-
-- The per-second timestamp cache favors speed at high message rates. It retains correctness to the millisecond level for log lines (it formats yyyy-mm-ddThh:MM:ss.mmm±ZZZZ). If you need sub-millisecond timestamps or different formatting, consider modifying `fmt_time_iso8601` accordingly.
-
-Examples
---------
-
-Basic usage (same as before):
+Usage
+-----
 
 ```c
 #include "emlog.h"
 
 int main(void) {
-    emlog_init(-1, true); // safe to call multiple times; last call wins
+    emlog_init(-1, true); /* safe to call multiple times; last call wins */
     emlog_set_level(EML_LEVEL_DEBUG);
 
     EML_INFO("main", "hello world %d", 1);
@@ -156,58 +110,34 @@ int main(void) {
 }
 ```
 
-Installing a writer:
+Installing a custom writer:
 
 ```c
 ssize_t my_writer(eml_level_t lvl, const char* line, size_t n, void* user) {
-    // sink to custom output (file, socket, ring buffer)
+    /* sink to custom output (file, socket, ring buffer) */
 }
 
 emlog_set_writer(my_writer, my_context);
 ```
 
-How to reproduce profiling runs used during development
------------------------------------------------------
+Compile locally against the built library:
 
-Massif (heap profile):
-
-```bash
-# example wrapper used during development; adjust path as needed
-my_massif_full.sh $(pwd)/build/tests/emlog_integration_test 10 1000
+```sh
+gcc -std=c11 -Iapp -c myprog.c -o myprog.o
+gcc myprog.o -Lbuild/release -lemlog -o myprog
 ```
 
-Valgrind Memcheck:
-
-```bash
-my_vlgrnd_full.sh $(pwd)/build/tests/emlog_integration_test 10 1000
-```
-
-Optional next steps (if you want even more speed)
-------------------------------------------------
-
-- Replace `strftime()` in the slow path with a small integer-based formatter for the common case (avoid strftime's generality). This can remove a small amount of CPU and possibly the last allocations in some libc variants.
-- Pre-allocate larger per-thread buffers to avoid the rare heap fallback when formatting extremely large messages.
-- Add an API to accept an explicit FD to log to (instead of FILE*/stdout/stderr) so the logger can avoid mixing stdio altogether.
-
-Contributing
+Design notes
 ------------
 
-If you add features or optimise further:
+- **No hot-path allocations.** `emlog_log()` builds a header iovec and a message iovec and emits both with a single `writev(2)` against the default FD-based writer, instead of concatenating into a heap buffer first.
+- **One-time `tzset()`.** Timezone initialization is done once in `emlog_init()` (only when timestamps are enabled), moving libc's lazy timezone-file parsing out of the hot path.
+- **Per-thread, per-second timestamp cache.** The ISO8601 prefix is cached in TLS for the current second; only the millisecond suffix is recomputed per call, cutting `localtime_r()`/`strftime()` calls under high message rates.
+- **Truncation for pipe atomicity.** Messages are capped at `LOG_MAX_WRITE` (`PIPE_BUF` where available, else 4096) so a single `write` never exceeds what a reader can atomically observe; truncated lines get a short `TRUNCATED` notice.
+- **Optional `writev` flush.** If the rest of your program writes to the same `stdout`/`stderr` `FILE*` via buffered stdio, call `emlog_set_writev_flush(true)` to `fflush()` before each `writev` and avoid interleaved output (off by default — it's the faster path).
 
-- Add or update tests in `src/test.c`.
-- Keep changes small and provide a short benchmark or profiling notes for non-obvious performance changes.
-
-License
--------
-
-This project continues to use the MIT license (see source headers).
-
-Contact
--------
-
-Open an issue or a PR in the repository with the change and a short explanation of why it helps.
-
-## Build profiles & hardening
+Build profiles & hardening
+---------------------------
 
 Builds go through `utils/build_libs.sh [profile ...]`, driven by the shared catalog `utils/gcc_build_profiles.sh` (synced verbatim from `Utils/compilation/`, never edited locally); artifacts land in `build/<profile>/`; `utils/check_hardening.sh` gates every release artifact.
 
@@ -232,3 +162,8 @@ Release hardening, by stage:
 | `-Wl,-z,relro -Wl,-z,now` | link | GOT/PLT read-only after load — full RELRO |
 | `-Wl,-z,noexecstack` | link | non-executable stack asserted |
 | `-Wl,-z,defs` | link .so | undefined symbols fail the build not the load |
+
+License
+-------
+
+MIT — see [LICENSE](./LICENSE).
