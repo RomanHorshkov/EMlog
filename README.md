@@ -1,11 +1,10 @@
 EMLog — Minimal thread-safe logging and canonical error utilities
 ===================================================================
 
-[![Quality](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml)
-[![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml)
-[![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml)
-[![Latest Tag](https://img.shields.io/github/v/tag/RomanHorshkov/EMlog?sort=semver)](https://github.com/RomanHorshkov/EMlog/tags)
-[![License: MIT](https://img.shields.io/github/license/RomanHorshkov/EMlog)](./LICENSE)
+[![Quality](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml/badge.svg?branch=reorganization)](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml?query=branch%3Areorganization)
+[![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg?branch=reorganization)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml?query=branch%3Areorganization)
+[![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg?branch=reorganization)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml?query=branch%3Areorganization)
+![License: MIT](https://img.shields.io/badge/license-MIT-informational)
 
 Overview
 --------
