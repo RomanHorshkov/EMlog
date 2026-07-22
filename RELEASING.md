@@ -39,8 +39,11 @@ This project is set up so a Git tag is the release trigger.
      coverage, integration test, sanitizers, ThreadSanitizer, package smoke
      test) via `workflow_call`
    - build the hardened, release-profile Debian package
-   - generate `SHA256SUMS` and a build-provenance attestation
+   - generate `SHA256SUMS`
    - publish a GitHub Release with the artifacts attached
+
+   No build-provenance attestation: that GitHub feature is unavailable for
+   user-owned private repositories.
 
 ## Important rules
 
@@ -60,4 +63,3 @@ Each GitHub Release publishes:
 
 - `emlog_<version>_<arch>.deb`
 - `SHA256SUMS`
-- a build-provenance attestation (verifiable with `gh attestation verify`)
