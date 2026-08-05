@@ -51,7 +51,7 @@ if [[ "${MODE}" != "run" ]]; then
     # build/release/ maintained by build_libs.sh).
     "${ROOT_DIR}/utils/build_libs.sh" release
 
-    REL_CPPFLAGS=("${CPPFLAGS_RELEASE[@]}" -D_GNU_SOURCE -Iapp)
+    REL_CPPFLAGS=("${CPPFLAGS_RELEASE[@]}" -D_GNU_SOURCE -Isrc)
     REL_CFLAGS=("${CFLAGS_RELEASE[@]}")
     REL_LDFLAGS=("${LDFLAGS_RELEASE[@]}")
 

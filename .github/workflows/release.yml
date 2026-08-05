@@ -74,7 +74,7 @@ jobs:
           BUNDLE_DIR="build/release-bundle"
           mkdir -p "${STAGE_DIR}/include" "${STAGE_DIR}/lib" "${BUNDLE_DIR}"
 
-          cp app/emlog.h "${STAGE_DIR}/include/"
+          cp src/emlog.h "${STAGE_DIR}/include/"
           cp build/release/libemlog.a "${STAGE_DIR}/lib/"
           cp build/release/libemlog.so."${VER}" "${STAGE_DIR}/lib/"
           ln -sf "libemlog.so.${VER}" "${STAGE_DIR}/lib/libemlog.so"

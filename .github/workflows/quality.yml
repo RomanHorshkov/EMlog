@@ -76,7 +76,7 @@ jobs:
       - name: Compile the library with strict diagnostics
         run: |
           ${{ matrix.compiler }} -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
-              -Iapp -c app/emlog.c -o /tmp/emlog-${{ matrix.compiler }}.o
+              -Isrc -c src/emlog.c -o /tmp/emlog-${{ matrix.compiler }}.o
 
   unit-tests-coverage:
     name: Private + public UTs, combined coverage
@@ -118,16 +118,18 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential
-      - name: Build and run the integration test
+          sudo apt-get install -y build-essential gcovr
+      - name: Build and run the integration test (coverage)
         run: ./utils/build_ITs.sh
-      - name: Upload integration result
+      - name: Build and run the integration test (release profile, the real gate)
+        run: ./utils/build_ITs_release.sh
+      - name: Upload integration result + coverage
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: integration-result
           if-no-files-found: warn
-          path: tests/results/ITs/integration_result.txt
+          path: tests/results/ITs
 
   sanitizers:
     name: ASan, UBSan, LSan (UTs + IT)

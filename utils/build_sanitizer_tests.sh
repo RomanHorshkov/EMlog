@@ -16,7 +16,7 @@ source "${SCRIPT_DIR}/gcc_build_profiles.sh"
 
 mkdir -p "${BUILD_DIR}"
 
-SANITIZE_CPPFLAGS=("${CPPFLAGS_SANITIZE[@]}" -Iapp)
+SANITIZE_CPPFLAGS=("${CPPFLAGS_SANITIZE[@]}" -Isrc)
 SANITIZE_CFLAGS=("${CFLAGS_SANITIZE[@]}")
 SANITIZE_LDFLAGS=("${LDFLAGS_SANITIZE[@]}")
 
@@ -31,7 +31,7 @@ gcc "${SANITIZE_CPPFLAGS[@]}" "${SANITIZE_CFLAGS[@]}" -c tests/UTs/privateAPI/te
 gcc "${BUILD_DIR}/test_private.o" -o "${BUILD_DIR}/ut_private_sanitized" "${SANITIZE_LDFLAGS[@]}" -lcmocka -pthread
 
 # Public UTs are black-box: build a sanitized emlog.o, link against it.
-gcc "${SANITIZE_CPPFLAGS[@]}" "${SANITIZE_CFLAGS[@]}" -c app/emlog.c -o "${BUILD_DIR}/emlog_pub.o"
+gcc "${SANITIZE_CPPFLAGS[@]}" "${SANITIZE_CFLAGS[@]}" -c src/emlog.c -o "${BUILD_DIR}/emlog_pub.o"
 PUB_OBJECTS=("${BUILD_DIR}/emlog_pub.o")
 for src in tests/UTs/publicAPI/*.c; do
     out="${BUILD_DIR}/pub_$(basename "${src%.c}").o"
@@ -41,7 +41,7 @@ done
 gcc "${PUB_OBJECTS[@]}" -o "${BUILD_DIR}/ut_public_sanitized" "${SANITIZE_LDFLAGS[@]}" -lcmocka -pthread
 
 # Integration test: real multi-threaded concurrency against a sanitized emlog.o.
-gcc "${SANITIZE_CPPFLAGS[@]}" "${SANITIZE_CFLAGS[@]}" -D_GNU_SOURCE -c app/emlog.c -o "${BUILD_DIR}/emlog_it.o"
+gcc "${SANITIZE_CPPFLAGS[@]}" "${SANITIZE_CFLAGS[@]}" -D_GNU_SOURCE -c src/emlog.c -o "${BUILD_DIR}/emlog_it.o"
 gcc "${SANITIZE_CPPFLAGS[@]}" "${SANITIZE_CFLAGS[@]}" -D_GNU_SOURCE -c tests/ITs/integration_test.c \
     -o "${BUILD_DIR}/integration_test.o"
 gcc "${BUILD_DIR}/emlog_it.o" "${BUILD_DIR}/integration_test.o" \

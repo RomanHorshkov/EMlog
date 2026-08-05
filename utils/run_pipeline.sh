@@ -97,7 +97,8 @@ report_coverage() {
     for entry in \
         "ut-public|${ROOT_DIR}/tests/results/public_UTs/coverage-summary.json" \
         "ut-private|${ROOT_DIR}/tests/results/private_UTs/coverage-summary.json" \
-        "ut-combined|${ROOT_DIR}/tests/results/UTs_all/coverage-summary.json"
+        "ut-combined|${ROOT_DIR}/tests/results/UTs_all/coverage-summary.json" \
+        "integration|${ROOT_DIR}/tests/results/ITs/coverage-summary.json"
     do
         label="${entry%%|*}"; path="${entry#*|}"
         if [[ -f "${path}" ]]; then
@@ -120,10 +121,11 @@ PY
 
 printf '%s\u2554\u2550\u2550 %s pipeline \u2550\u2550\u2550\u2550%s\n' "${c_bold}" "${PKG_LABEL}" "${c_rst}"
 
-stage "build"          bash "${SCRIPT_DIR}/build_libs.sh"
-stage "unit-tests"     bash "${SCRIPT_DIR}/build_UTs.sh"
-stage "integration"    bash "${SCRIPT_DIR}/build_ITs.sh"
-stage "package"        bash "${SCRIPT_DIR}/build_deb.sh"
+stage "build"              bash "${SCRIPT_DIR}/build_libs.sh"
+stage "unit-tests"         bash "${SCRIPT_DIR}/build_UTs.sh"
+stage "integration"        bash "${SCRIPT_DIR}/build_ITs.sh"
+stage "integration-release" bash "${SCRIPT_DIR}/build_ITs_release.sh"
+stage "package"            bash "${SCRIPT_DIR}/build_deb.sh"
 
 report_coverage
 

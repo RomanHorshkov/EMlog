@@ -94,7 +94,7 @@ STAGE_DEV="${ROOT_DIR}/build/pkgroot/${PKG_DEV}"
 rm -rf "$STAGE_DEV"
 mkdir -p "$STAGE_DEV/DEBIAN" "$STAGE_DEV/usr/local/lib" "$STAGE_DEV/usr/local/include"
 
-install -m 0644 app/emlog.h "$STAGE_DEV/usr/local/include/emlog.h"
+install -m 0644 src/emlog.h "$STAGE_DEV/usr/local/include/emlog.h"
 install -m 0644 build/release/libemlog.a "$STAGE_DEV/usr/local/lib/libemlog.a"
 ln -sf "libemlog.so.$VER" "$STAGE_DEV/usr/local/lib/libemlog.so"
 

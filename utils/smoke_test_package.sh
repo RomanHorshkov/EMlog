@@ -4,7 +4,7 @@ set -euo pipefail
 # Package smoke test: proves the .deb genuinely works for an external consumer — compiles and
 # runs a tiny program against ONLY the installed system paths (/usr/local/include,
 # /usr/local/lib), never the repo's own build/ tree. This is deliberately NOT a rebuild of the
-# library: if this script had to compile app/emlog.c itself, it would only prove the SOURCE
+# library: if this script had to compile src/emlog.c itself, it would only prove the SOURCE
 # works, not that the shipped, installed PACKAGE does.
 
 START_DIR="$(pwd -P)"

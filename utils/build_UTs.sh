@@ -13,7 +13,7 @@
 #   ./utils/build_UTs.sh --run-only     # run already-built binaries + coverage
 #
 # The two suites stay separately compiled binaries (they must — the private
-# suite is white-box and #includes app/emlog.c directly, the public suite is
+# suite is white-box and #includes src/emlog.c directly, the public suite is
 # black-box and links a separately compiled emlog object), but ONE script
 # builds them, runs them, and produces the coverage reports:
 #
@@ -68,7 +68,7 @@ if [[ "${MODE}" != "run" ]]; then
 
     # Debug profile + coverage layer; -O0 (after the profile's -Og) for exact
     # line/branch attribution in gcov data.
-    UT_CPPFLAGS=("${CPPFLAGS_DEBUG[@]}" -D_GNU_SOURCE -Iapp)
+    UT_CPPFLAGS=("${CPPFLAGS_DEBUG[@]}" -D_GNU_SOURCE -Isrc)
     UT_CFLAGS=("${CFLAGS_DEBUG[@]}" -O0 "${CFLAGS_INSTRUMENT_COVERAGE[@]}")
     UT_LDFLAGS=("${LDFLAGS_DEBUG[@]}" "${LDFLAGS_INSTRUMENT_COVERAGE[@]}")
 
@@ -80,7 +80,7 @@ if [[ "${MODE}" != "run" ]]; then
 
     # --- public suite: black-box, links a separately compiled emlog object ---
     printf '[UTs] building public (black-box) suite...\n'
-    gcc "${UT_CPPFLAGS[@]}" "${UT_CFLAGS[@]}" -c app/emlog.c -o "${PUB_DIR}/emlog.o"
+    gcc "${UT_CPPFLAGS[@]}" "${UT_CFLAGS[@]}" -c src/emlog.c -o "${PUB_DIR}/emlog.o"
     for src in tests/UTs/publicAPI/*.c; do
         gcc "${UT_CPPFLAGS[@]}" "${UT_CFLAGS[@]}" -Itests/UTs/publicAPI \
             -c "${src}" -o "${PUB_DIR}/$(basename "${src%.c}").o"
@@ -117,19 +117,24 @@ if ! command -v gcovr >/dev/null 2>&1; then
     exit 1
 fi
 
-# Each suite's build dir is passed as the SEARCH PATH so its summary counts
+# Each suite's build dir is passed as the SEARCH PATH so its report counts
 # only its own gcov data (--object-directory would sweep the whole tree and
 # silently merge both suites into every "per-suite" number).
-printf '[coverage] per-suite summaries...\n'
+printf '[coverage] per-suite reports...\n'
+# --html-details / --json-summary each take their OWN optional OUTPUT arg
+# directly after the flag; -o is only the shared fallback for formats that
+# don't. Repeating -o for two formats in one call makes the second -o win
+# for BOTH (the HTML report gets written into the .json path) — pass each
+# format's path inline instead.
 gcovr -r "${ROOT_DIR}" \
     --exclude 'tests/' \
-    --json-summary \
-    -o "${PRIV_RESULT_DIR}/coverage-summary.json" \
+    --html --html-details "${PRIV_RESULT_DIR}/UTs_private_coverage.html" \
+    --json-summary "${PRIV_RESULT_DIR}/coverage-summary.json" \
     "${PRIV_DIR}"
 gcovr -r "${ROOT_DIR}" \
     --exclude 'tests/' \
-    --json-summary \
-    -o "${PUB_RESULT_DIR}/coverage-summary.json" \
+    --html --html-details "${PUB_RESULT_DIR}/UTs_public_coverage.html" \
+    --json-summary "${PUB_RESULT_DIR}/coverage-summary.json" \
     "${PUB_DIR}"
 
 # Combined report: both build dirs given as SEARCH PATHS in one invocation.
