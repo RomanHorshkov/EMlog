@@ -7,6 +7,8 @@ EMLog — Minimal thread-safe logging and canonical error utilities
 [![License: MIT](https://img.shields.io/badge/license-MIT-informational)](./LICENSE)
 ![Coverage](https://img.shields.io/badge/coverage-96%25%20line-brightgreen)
 
+**📦 [Download the latest release](https://github.com/RomanHorshkov/EMlog/releases/latest)** — `.deb` packages, tarball, `SHA256SUMS`.
+
 Overview
 --------
 
