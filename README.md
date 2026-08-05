@@ -5,7 +5,7 @@ EMLog — Minimal thread-safe logging and canonical error utilities
 [![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml?query=branch%3Amaster)
 [![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml?query=branch%3Amaster)
 [![License: MIT](https://img.shields.io/badge/license-MIT-informational)](./LICENSE)
-[![Coverage](https://img.shields.io/badge/coverage-report-blue)](https://romanhorshkov.github.io/EMlog/)
+![Coverage](https://img.shields.io/badge/coverage-96%25%20line-brightgreen)
 
 Overview
 --------
@@ -131,15 +131,14 @@ Or individually:
 ./utils/build_tsan_tests.sh       # IT under TSan
 ```
 
-Coverage outputs — UTs and the integration test each get their own, independent report; nothing here is silently merged:
+Coverage outputs — UTs and the integration test each get their own, independent report; nothing here is silently merged, and they stay local (no hosted HTML site):
 
 - `tests/results/private_UTs/UTs_private_coverage.html` + `coverage-summary.json` — private suite alone
 - `tests/results/public_UTs/UTs_public_coverage.html` + `coverage-summary.json` — public suite alone
 - `tests/results/UTs_all/UTs_all_coverage.{html,xml}` + `coverage-summary.json` — both UT suites merged
 - `tests/results/ITs/ITs_coverage.{html,xml}` + `coverage-summary.json` — integration test alone
 
-Published HTML versions of all four (rebuilt on every push to `master`): see the
-**Coverage** badge above, or [romanhorshkov.github.io/EMlog](https://romanhorshkov.github.io/EMlog/) directly.
+CI uploads all four as workflow artifacts on every push (download from the run's Artifacts section); the README **Coverage** badge is the combined-UT line-coverage number, updated by hand.
 
 CI (`quality.yml`) runs the same scripts, plus compiler-portability (gcc + clang, `-Werror`), ASan/UBSan/LSan, ThreadSanitizer, and a package build/install/smoke-test stage. `security.yml` runs GCC's `-fanalyzer` on every push, PR, and weekly on a schedule.
 
