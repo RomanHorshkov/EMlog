@@ -1,9 +1,9 @@
 EMLog — Minimal thread-safe logging and canonical error utilities
 ===================================================================
 
-[![Quality](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml/badge.svg?branch=reorganization)](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml?query=branch%3Areorganization)
-[![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg?branch=reorganization)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml?query=branch%3Areorganization)
-[![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg?branch=reorganization)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml?query=branch%3Areorganization)
+[![Quality](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml?query=branch%3Amaster)
+[![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml?query=branch%3Amaster)
+[![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml?query=branch%3Amaster)
 ![License: MIT](https://img.shields.io/badge/license-MIT-informational)
 
 Overview
@@ -33,35 +33,70 @@ Project layout
 Build
 -----
 
-Everything you need to build/run is in `utils/`.
+Everything you need to build/run is in `utils/`. Every script can be launched
+from any directory; paths are resolved relative to the repo root. All compile
+flags come from the shared profile catalog `utils/gcc_build_profiles.sh` —
+no script carries ad-hoc flag literals.
 
 | Script | Purpose |
 | ------ | ------- |
 | `utils/build_libs.sh [profile ...]` | Build `libemlog.so.<VERSION>` + `libemlog.a` per profile into `build/<profile>/` (default: debug audit sanitize release); release artifacts are gated by `check_hardening.sh`. |
-| `utils/make_UTs_pub.sh` / `make_UTs_priv.sh` / `make_UTs_all.sh` | Build + run the public / private / combined-coverage unit tests. |
-| `utils/make_UTs_release.sh` | Private + public UTs built against the release profile, real assertions. |
-| `utils/make_ITs.sh` | Build + run the multithreaded integration test. |
-| `utils/make_sanitizer_tests.sh` | UTs + IT under ASan/UBSan/LSan. |
-| `utils/make_tsan_tests.sh` | The integration test under ThreadSanitizer. |
-| `utils/build_deb.sh` | Release Debian package + `SHA256SUMS` (VERSION-validated, hardening-checked). |
-| `utils/smoke_test_package.sh` | Compiles against the *installed* `/usr/local` package, never the repo build tree. |
-| `utils/check_hardening.sh` | `readelf` assertions on built ELFs (full RELRO, NX stack, stack canary, …). |
-| `utils/run_pipeline.sh` | The full board, end to end: libs → unit tests → integration → deb. |
+| `utils/build_UTs.sh [--build-only\|--run-only]` | Build + run BOTH unit-test suites (private white-box + public black-box, separately compiled binaries, one run) with per-suite and combined gcovr coverage. Debug profile + coverage layer. |
+| `utils/build_UTs_release.sh [--build-only\|--run-only]` | The same two suites compiled and run under the release profile (-O2, NDEBUG, hardening); the public suite links the release static library the deb ships. |
+| `utils/build_ITs.sh [--build-only\|--run-only]` | Build + run the multithreaded integration test (release profile + `-g`). |
+| `utils/build_sanitizer_tests.sh` | Both UT suites + IT under ASan/UBSan/LSan (sanitize profile). |
+| `utils/build_tsan_tests.sh` | The integration test under ThreadSanitizer (tsan profile). |
+| `utils/build_deb.sh` | Debian packages `libemlog` (runtime) + `libemlog-dev` (header, static lib, linker symlink) + `SHA256SUMS` into `build/debs/` (VERSION-validated, hardening-checked). |
+| `utils/smoke_test_package.sh` | Compiles against the *installed* `/usr/local` package, never the repo build tree. Run after installing the debs. |
+| `utils/check_hardening.sh <elf>` | `readelf` assertions on built ELFs (full RELRO, NX stack, stack canary, …). |
+| `utils/run_pipeline.sh` | The full board, end to end: libs → unit tests → integration → debs, with a coverage and package report at the end. |
 
-Artifacts:
+The test scripts take an optional phase flag:
+
+- *(no flag)* — build the test binaries, then run them (and, for
+  `build_UTs.sh`, generate coverage).
+- `--build-only` — compile the binaries and stop; nothing executes.
+- `--run-only` — run previously built binaries without recompiling
+  (errors out with a hint if the binaries are missing).
+
+Library artifacts:
 
 ```sh
-./utils/build_libs.sh
+./utils/build_libs.sh              # all four default profiles
+./utils/build_libs.sh release      # just the release profile
 ```
 
-- `build/release/libemlog.a`
-- `build/release/libemlog.so.<VERSION>`
+- `build/<profile>/libemlog.a`
+- `build/<profile>/libemlog.so.<VERSION>` (+ `.so` / `.so.<MAJOR>` symlinks)
+- flat `build/libemlog.*` symlinks always point into `build/release/`
+
+Packaging
+---------
+
+```sh
+./utils/build_deb.sh
+```
+
+produces in `build/debs/`:
+
+- `libemlog_<version>_<arch>.deb` — runtime: `/usr/local/lib/libemlog.so.<version>` + soname symlink, `ldconfig` hooks.
+- `libemlog-dev_<version>_<arch>.deb` — development: `/usr/local/include/emlog.h`, `/usr/local/lib/libemlog.a`, `libemlog.so` linker symlink. Depends on `libemlog (= <version>)`.
+- `SHA256SUMS` — checksums over both debs.
+
+Install both (apt resolves the dependency order):
+
+```sh
+sudo apt-get install ./build/debs/libemlog_<version>_<arch>.deb \
+                     ./build/debs/libemlog-dev_<version>_<arch>.deb
+./utils/smoke_test_package.sh   # proves the INSTALLED package links and runs
+```
 
 Release process
 ----------------
 
 Releases are tag-driven. See [RELEASING.md](./RELEASING.md) for the exact
-merge, tag, and publish flow.
+merge, tag, and publish flow. Each GitHub Release attaches both debs, a
+header+libs tarball, and `SHA256SUMS`.
 
 Testing
 -------
@@ -81,15 +116,18 @@ Run everything:
 Or individually:
 
 ```sh
-./utils/make_UTs_all.sh   # unit tests + coverage
-./utils/make_ITs.sh       # integration test
+./utils/build_UTs.sh              # both unit-test suites + coverage
+./utils/build_UTs_release.sh      # same suites under the release profile
+./utils/build_ITs.sh              # integration test
+./utils/build_sanitizer_tests.sh  # UTs + IT under ASan/UBSan/LSan
+./utils/build_tsan_tests.sh       # IT under TSan
 ```
 
 Coverage outputs:
 
-- `tests/results/UTs_all/UTs_all_coverage.html`
-- `tests/results/UTs_all/UTs_all_coverage.xml`
-- `tests/results/UTs_all/coverage-summary.json`
+- `tests/results/private_UTs/coverage-summary.json` — private suite alone
+- `tests/results/public_UTs/coverage-summary.json` — public suite alone
+- `tests/results/UTs_all/UTs_all_coverage.{html,xml}` + `coverage-summary.json` — both suites merged
 
 CI (`quality.yml`) runs the same scripts, plus compiler-portability (gcc + clang, `-Werror`), ASan/UBSan/LSan, ThreadSanitizer, and a package build/install/smoke-test stage. `security.yml` runs GCC's `-fanalyzer` on every push, PR, and weekly on a schedule.
 

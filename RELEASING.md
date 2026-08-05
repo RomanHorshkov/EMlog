@@ -38,7 +38,7 @@ This project is set up so a Git tag is the release trigger.
    - run the full `Quality` gate (build, compiler portability, unit tests +
      coverage, integration test, sanitizers, ThreadSanitizer, package smoke
      test) via `workflow_call`
-   - build the hardened, release-profile Debian package
+   - build the hardened, release-profile Debian packages (`libemlog` + `libemlog-dev`)
    - generate `SHA256SUMS`
    - publish a GitHub Release with the artifacts attached
 
@@ -61,5 +61,8 @@ This project is set up so a Git tag is the release trigger.
 
 Each GitHub Release publishes:
 
-- `emlog_<version>_<arch>.deb`
+- `libemlog_<version>_<arch>.deb` — runtime package (shared library)
+- `libemlog-dev_<version>_<arch>.deb` — development package (header, static
+  library, linker symlink; depends on the exact-version runtime package)
+- `emlog-<version>-linux-x86_64.tar.gz` — header + libraries tarball
 - `SHA256SUMS`

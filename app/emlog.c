@@ -559,8 +559,21 @@ static void _copy_cached_ts(char* out, size_t n, unsigned ms)
 
     if(ms > 999) ms %= 1000; /* optional policy: normalize */
 
-    int w = snprintf(out, n, "%s.%03u%s", _ts_cache_prefix_tls, ms, _ts_cache_tz_tls);
-    if(w < 0) out[0] = '\0';
+    /* Compose in a buffer that provably fits the worst case (prefix 31 + '.' + 3 digits +
+     * tz 7 + NUL = 43): -Wformat-truncation=2 assumes an unknown-size destination is size 1,
+     * so formatting straight into the caller's buffer can never be warning-clean. */
+    char tmp[sizeof _ts_cache_prefix_tls + 4 + sizeof _ts_cache_tz_tls];
+    int  w = snprintf(tmp, sizeof tmp, "%s.%03u%s", _ts_cache_prefix_tls, ms, _ts_cache_tz_tls);
+    if(w < 0)
+    {
+        out[0] = '\0';
+        return;
+    }
+
+    size_t len = (size_t)w;
+    if(len >= n) len = n - 1;
+    memcpy(out, tmp, len);
+    out[len] = '\0';
 }
 
 static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)

@@ -100,7 +100,7 @@ int main(void)
         pthread_join(th[i], NULL);
 
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    double elapsed = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+    double elapsed = (double)(t1.tv_sec - t0.tv_sec) + (double)(t1.tv_nsec - t0.tv_nsec) / 1e9;
 
     const unsigned long expected = (unsigned long)nthreads * (unsigned long)msgs;
     const unsigned long seen     = atomic_load_explicit(&g_lines, memory_order_relaxed);

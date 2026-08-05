@@ -92,9 +92,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libcmocka-dev gcovr jq
       - name: Release UTs (private + public, -O2, real assertions)
-        run: ./utils/make_UTs_release.sh
+        run: ./utils/build_UTs_release.sh
       - name: Coverage UTs (private + public, combined gcovr report)
-        run: ./utils/make_UTs_all.sh
+        run: ./utils/build_UTs.sh
       - name: Upload coverage artifacts (HTML/XML/JSON)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -120,7 +120,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential
       - name: Build and run the integration test
-        run: ./utils/make_ITs.sh
+        run: ./utils/build_ITs.sh
       - name: Upload integration result
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -143,7 +143,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libcmocka-dev
       - name: Build and run sanitized UTs and IT
-        run: ./utils/make_sanitizer_tests.sh
+        run: ./utils/build_sanitizer_tests.sh
 
   thread-sanitizer:
     name: ThreadSanitizer (multi-threaded IT)
@@ -159,7 +159,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential
       - name: Build and run the TSan IT
-        run: ./utils/make_tsan_tests.sh
+        run: ./utils/build_tsan_tests.sh
 
   package-smoke:
     name: Package build + install + smoke test
@@ -176,16 +176,19 @@ jobs:
           sudo apt-get install -y build-essential pkg-config fakeroot
       - name: Build .deb
         run: ./utils/build_deb.sh
-      - name: Install the built .deb
+      - name: Install the built .debs (runtime + dev)
         run: |
           VERSION="$(tr -d '[:space:]' < VERSION)"
           ARCH="$(dpkg --print-architecture)"
-          DEB_FILE="build/debs/emlog_${VERSION}_${ARCH}.deb"
-          if [[ ! -f "${DEB_FILE}" ]]; then
-            echo "expected package not found: ${DEB_FILE}" >&2
-            exit 1
-          fi
-          sudo apt-get install -y "./${DEB_FILE}"
+          DEB_RT="build/debs/libemlog_${VERSION}_${ARCH}.deb"
+          DEB_DEV="build/debs/libemlog-dev_${VERSION}_${ARCH}.deb"
+          for f in "${DEB_RT}" "${DEB_DEV}"; do
+            if [[ ! -f "${f}" ]]; then
+              echo "expected package not found: ${f}" >&2
+              exit 1
+            fi
+          done
+          sudo apt-get install -y "./${DEB_RT}" "./${DEB_DEV}"
       - name: Smoke test the installed package
         run: ./utils/smoke_test_package.sh
       - name: Upload package artifacts

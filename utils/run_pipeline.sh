@@ -96,7 +96,8 @@ report_coverage() {
     local entry label path
     for entry in \
         "ut-public|${ROOT_DIR}/tests/results/public_UTs/coverage-summary.json" \
-        "ut-private|${ROOT_DIR}/tests/results/private_UTs/coverage-summary.json"
+        "ut-private|${ROOT_DIR}/tests/results/private_UTs/coverage-summary.json" \
+        "ut-combined|${ROOT_DIR}/tests/results/UTs_all/coverage-summary.json"
     do
         label="${entry%%|*}"; path="${entry#*|}"
         if [[ -f "${path}" ]]; then
@@ -114,15 +115,14 @@ for f in d["files"]:
 PY
         fi
     done
-    (( any )) || printf '  no coverage-summary.json found (ut-public / ut-private did not complete)\n'
+    (( any )) || printf '  no coverage-summary.json found (unit-tests stage did not complete)\n'
 }
 
 printf '%s\u2554\u2550\u2550 %s pipeline \u2550\u2550\u2550\u2550%s\n' "${c_bold}" "${PKG_LABEL}" "${c_rst}"
 
 stage "build"          bash "${SCRIPT_DIR}/build_libs.sh"
-stage "ut-public"      bash "${SCRIPT_DIR}/make_UTs_pub.sh"
-stage "ut-private"     bash "${SCRIPT_DIR}/make_UTs_priv.sh"
-stage "integration"    bash "${SCRIPT_DIR}/make_ITs.sh"
+stage "unit-tests"     bash "${SCRIPT_DIR}/build_UTs.sh"
+stage "integration"    bash "${SCRIPT_DIR}/build_ITs.sh"
 stage "package"        bash "${SCRIPT_DIR}/build_deb.sh"
 
 report_coverage
