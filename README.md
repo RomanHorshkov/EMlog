@@ -75,7 +75,7 @@ Library artifacts:
 ./utils/build_libs.sh release      # just the release profile
 ```
 
-- `build/<profile>/libemlog.a`
+- `build/<profile>/libemlog.a` — built `-fPIC`, so it can be linked into your own shared library as well as into static or PIE executables
 - `build/<profile>/libemlog.so.<VERSION>` (+ `.so` / `.so.<MAJOR>` symlinks)
 - flat `build/libemlog.*` symlinks always point into `build/release/`
 
@@ -214,7 +214,7 @@ Builds go through `utils/build_libs.sh [profile ...]`, driven by the shared cata
 | `-fstack-clash-protection` | compile | page-by-page stack growth — the guard page can't be jumped |
 | `-fcf-protection=full` | compile | x86-64 CET: indirect-branch tracking + shadow stack, NOP on older CPUs |
 | `-D_FORTIFY_SOURCE=3` | preprocess | checked libc calls with dynamic object sizes |
-| `-fPIC` | compile | position-independent code for the .so |
+| `-fPIC` | compile | position-independent code, used for **both** the `.so` and the `.a` so the archive links into shared libraries, PIE executables and static executables alike |
 | `-Wl,-z,relro -Wl,-z,now` | link | GOT/PLT read-only after load — full RELRO |
 | `-Wl,-z,noexecstack` | link | non-executable stack asserted |
 | `-Wl,-z,defs` | link .so | undefined symbols fail the build not the load |
