@@ -39,4 +39,4 @@ jobs:
 
       - name: Run GCC's static analyzer over the library source
         run: |
-          gcc -std=c11 -Wall -Wextra -fanalyzer -Isrc -c src/emlog.c -o /tmp/emlog_analyzer.o
+          gcc -std=c11 -Wall -Wextra -fanalyzer -Iapp -c app/emlog.c -o /tmp/emlog_analyzer.o

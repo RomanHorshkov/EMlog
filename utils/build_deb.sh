@@ -86,6 +86,13 @@ exit 0
 EOF
 chmod 0755 "$STAGE_RT/DEBIAN/postrm"
 
+# Ship the DEP-5 copyright file (first-party terms + every third-party notice)
+# at /usr/share/doc/<pkg>/copyright (Debian Policy 12.5). A missing file is a
+# build error: a binary must never leave without its notices.
+COPYRIGHT_SRC="${ROOT_DIR}/debian/copyright"
+[[ -f "${COPYRIGHT_SRC}" ]] || die "missing ${COPYRIGHT_SRC} — third-party notices must ship in the deb"
+install -d -m 0755 "${STAGE_RT}/usr/share" "${STAGE_RT}/usr/share/doc" "${STAGE_RT}/usr/share/doc/${PKG_RUNTIME}"
+install -m 0644 "${COPYRIGHT_SRC}" "${STAGE_RT}/usr/share/doc/${PKG_RUNTIME}/copyright"
 DEB_RT="${PKG_RUNTIME}_${VER}_${ARCH}.deb"
 fakeroot dpkg-deb --build "$STAGE_RT" "$OUT_DIR/$DEB_RT"
 
@@ -94,7 +101,7 @@ STAGE_DEV="${ROOT_DIR}/build/pkgroot/${PKG_DEV}"
 rm -rf "$STAGE_DEV"
 mkdir -p "$STAGE_DEV/DEBIAN" "$STAGE_DEV/usr/local/lib" "$STAGE_DEV/usr/local/include"
 
-install -m 0644 src/emlog.h "$STAGE_DEV/usr/local/include/emlog.h"
+install -m 0644 app/emlog.h "$STAGE_DEV/usr/local/include/emlog.h"
 install -m 0644 build/release/libemlog.a "$STAGE_DEV/usr/local/lib/libemlog.a"
 ln -sf "libemlog.so.$VER" "$STAGE_DEV/usr/local/lib/libemlog.so"
 
@@ -109,6 +116,13 @@ Maintainer: Roman Horshkov <https://github.com/RomanHorshkov>
 Description: Development files for libemlog (header, static library, linker symlink)
 EOF
 
+# Ship the DEP-5 copyright file (first-party terms + every third-party notice)
+# at /usr/share/doc/<pkg>/copyright (Debian Policy 12.5). A missing file is a
+# build error: a binary must never leave without its notices.
+COPYRIGHT_SRC="${ROOT_DIR}/debian/copyright"
+[[ -f "${COPYRIGHT_SRC}" ]] || die "missing ${COPYRIGHT_SRC} — third-party notices must ship in the deb"
+install -d -m 0755 "${STAGE_DEV}/usr/share" "${STAGE_DEV}/usr/share/doc" "${STAGE_DEV}/usr/share/doc/${PKG_DEV}"
+install -m 0644 "${COPYRIGHT_SRC}" "${STAGE_DEV}/usr/share/doc/${PKG_DEV}/copyright"
 DEB_DEV="${PKG_DEV}_${VER}_${ARCH}.deb"
 fakeroot dpkg-deb --build "$STAGE_DEV" "$OUT_DIR/$DEB_DEV"
 

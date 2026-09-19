@@ -13,7 +13,7 @@
 #   ./utils/build_UTs.sh --run-only     # run already-built binaries + coverage
 #
 # The two suites stay separately compiled binaries (they must — the private
-# suite is white-box and #includes src/emlog.c directly, the public suite is
+# suite is white-box and #includes app/emlog.c directly, the public suite is
 # black-box and links a separately compiled emlog object), but ONE script
 # builds them, runs them, and produces the coverage reports:
 #
@@ -68,7 +68,7 @@ if [[ "${MODE}" != "run" ]]; then
 
     # Debug profile + coverage layer; -O0 (after the profile's -Og) for exact
     # line/branch attribution in gcov data.
-    UT_CPPFLAGS=("${CPPFLAGS_DEBUG[@]}" -D_GNU_SOURCE -Isrc)
+    UT_CPPFLAGS=("${CPPFLAGS_DEBUG[@]}" -D_GNU_SOURCE -Iapp)
     UT_CFLAGS=("${CFLAGS_DEBUG[@]}" -O0 "${CFLAGS_INSTRUMENT_COVERAGE[@]}")
     UT_LDFLAGS=("${LDFLAGS_DEBUG[@]}" "${LDFLAGS_INSTRUMENT_COVERAGE[@]}")
 
@@ -80,7 +80,7 @@ if [[ "${MODE}" != "run" ]]; then
 
     # --- public suite: black-box, links a separately compiled emlog object ---
     printf '[UTs] building public (black-box) suite...\n'
-    gcc "${UT_CPPFLAGS[@]}" "${UT_CFLAGS[@]}" -c src/emlog.c -o "${PUB_DIR}/emlog.o"
+    gcc "${UT_CPPFLAGS[@]}" "${UT_CFLAGS[@]}" -c app/emlog.c -o "${PUB_DIR}/emlog.o"
     for src in tests/UTs/publicAPI/*.c; do
         gcc "${UT_CPPFLAGS[@]}" "${UT_CFLAGS[@]}" -Itests/UTs/publicAPI \
             -c "${src}" -o "${PUB_DIR}/$(basename "${src%.c}").o"

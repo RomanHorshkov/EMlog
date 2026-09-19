@@ -49,11 +49,11 @@ RESULT_DIR="${ROOT_DIR}/tests/results/ITs"
 mkdir -p "${BUILD_DIR}" "${RESULT_DIR}"
 
 if [[ "${MODE}" != "run" ]]; then
-    IT_CPPFLAGS=("${CPPFLAGS_RELEASE[@]}" -D_GNU_SOURCE -Isrc)
+    IT_CPPFLAGS=("${CPPFLAGS_RELEASE[@]}" -D_GNU_SOURCE -Iapp)
     IT_CFLAGS=("${CFLAGS_RELEASE[@]}" -g)
     IT_LDFLAGS=("${LDFLAGS_RELEASE[@]}")
 
-    gcc "${IT_CPPFLAGS[@]}" "${IT_CFLAGS[@]}" -c src/emlog.c -o "${BUILD_DIR}/emlog.o"
+    gcc "${IT_CPPFLAGS[@]}" "${IT_CFLAGS[@]}" -c app/emlog.c -o "${BUILD_DIR}/emlog.o"
     gcc "${IT_CPPFLAGS[@]}" "${IT_CFLAGS[@]}" -c tests/ITs/integration_test.c \
         -o "${BUILD_DIR}/integration_test.o"
     gcc "${IT_LDFLAGS[@]}" "${BUILD_DIR}/emlog.o" "${BUILD_DIR}/integration_test.o" \

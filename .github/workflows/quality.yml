@@ -76,7 +76,7 @@ jobs:
       - name: Compile the library with strict diagnostics
         run: |
           ${{ matrix.compiler }} -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
-              -Isrc -c src/emlog.c -o /tmp/emlog-${{ matrix.compiler }}.o
+              -Iapp -c app/emlog.c -o /tmp/emlog-${{ matrix.compiler }}.o
 
   unit-tests-coverage:
     name: Private + public UTs, combined coverage

@@ -15,11 +15,11 @@ cd -- "${ROOT_DIR}"
 source "${SCRIPT_DIR}/gcc_build_profiles.sh"
 mkdir -p "${BUILD_DIR}"
 
-TSAN_CPPFLAGS=("${CPPFLAGS_TSAN[@]}" -D_GNU_SOURCE -Isrc)
+TSAN_CPPFLAGS=("${CPPFLAGS_TSAN[@]}" -D_GNU_SOURCE -Iapp)
 TSAN_CFLAGS=("${CFLAGS_TSAN[@]}" -fno-pie)
 TSAN_LDFLAGS=("${LDFLAGS_TSAN[@]}" -no-pie)
 
-gcc "${TSAN_CPPFLAGS[@]}" "${TSAN_CFLAGS[@]}" -c src/emlog.c -o "${BUILD_DIR}/emlog_it.o"
+gcc "${TSAN_CPPFLAGS[@]}" "${TSAN_CFLAGS[@]}" -c app/emlog.c -o "${BUILD_DIR}/emlog_it.o"
 gcc "${TSAN_CPPFLAGS[@]}" "${TSAN_CFLAGS[@]}" -c tests/ITs/integration_test.c -o "${BUILD_DIR}/integration_test.o"
 gcc "${BUILD_DIR}/emlog_it.o" "${BUILD_DIR}/integration_test.o" \
     -o "${BUILD_DIR}/it_tsan" "${TSAN_LDFLAGS[@]}" -pthread

@@ -26,8 +26,8 @@ Why EMLog?
 Project layout
 --------------
 
-- `src/emlog.h` — public API, fully documented with Doxygen comments.
-- `src/emlog.c` — implementation (writer dispatch, timestamp cache, `errno` categorization).
+- `app/emlog.h` — public API, fully documented with Doxygen comments.
+- `app/emlog.c` — implementation (writer dispatch, timestamp cache, `errno` categorization).
 - `tests/UTs/privateAPI/`, `tests/UTs/publicAPI/` — cmocka-based unit tests (white-box + black-box).
 - `tests/ITs/integration_test.c` — multithreaded integration/stress harness.
 - `utils/` — build, packaging, test, coverage, and hardening scripts.
@@ -173,7 +173,7 @@ emlog_set_writer(my_writer, my_context);
 Compile locally against the built library:
 
 ```sh
-gcc -std=c11 -Isrc -c myprog.c -o myprog.o
+gcc -std=c11 -Iapp -c myprog.c -o myprog.o
 gcc myprog.o -Lbuild/release -lemlog -o myprog
 ```
 

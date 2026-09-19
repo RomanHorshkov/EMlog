@@ -60,11 +60,11 @@ if [[ "${MODE}" != "run" ]]; then
     # stamp mismatches.
     rm -f "${BUILD_DIR}"/*.gcda "${BUILD_DIR}"/*.gcno "${BUILD_DIR}"/*.gcov 2>/dev/null || true
 
-    IT_CPPFLAGS=("${CPPFLAGS_DEBUG[@]}" -D_GNU_SOURCE -Isrc)
+    IT_CPPFLAGS=("${CPPFLAGS_DEBUG[@]}" -D_GNU_SOURCE -Iapp)
     IT_CFLAGS=("${CFLAGS_DEBUG[@]}" -O0 "${CFLAGS_INSTRUMENT_COVERAGE[@]}")
     IT_LDFLAGS=("${LDFLAGS_DEBUG[@]}" "${LDFLAGS_INSTRUMENT_COVERAGE[@]}")
 
-    gcc "${IT_CPPFLAGS[@]}" "${IT_CFLAGS[@]}" -c src/emlog.c -o "${BUILD_DIR}/emlog.o"
+    gcc "${IT_CPPFLAGS[@]}" "${IT_CFLAGS[@]}" -c app/emlog.c -o "${BUILD_DIR}/emlog.o"
     gcc "${IT_CPPFLAGS[@]}" "${IT_CFLAGS[@]}" -c tests/ITs/integration_test.c \
         -o "${BUILD_DIR}/integration_test.o"
     gcc "${IT_LDFLAGS[@]}" "${BUILD_DIR}/emlog.o" "${BUILD_DIR}/integration_test.o" \

@@ -46,8 +46,8 @@ source "${PROFILE_FILE}"
 
 # --- project description ------------------------------------------------------
 LIB_BASENAME="emlog"
-LIB_SOURCES=(src/emlog.c)
-LIB_CPPFLAGS=(-Isrc)
+LIB_SOURCES=(app/emlog.c)
+LIB_CPPFLAGS=(-Iapp)
 # emlog uses pthread mutexes; with -Wl,-z,defs every needed library must be
 # named explicitly or the shared link fails.
 LIB_LDLIBS=(-lpthread)
