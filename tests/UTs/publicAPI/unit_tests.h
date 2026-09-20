@@ -26,10 +26,16 @@ void emlog_timestamps_false(void** state);
 void emlog_timestamps_toggle(void** state);
 
 /* error helper tests */
-void emlog_error_from_errno(void** state);
-void emlog_error_name_strings(void** state);
-void emlog_error_exit_codes(void** state);
 void emlog_log_errno_captures_context(void** state);
+
+/* v1.4: errno transparency, control-byte sanitizing, journald mode, lock-free default path */
+void emlog_errno_preserved_custom_writer(void** state);
+void emlog_errno_preserved_default_path_failed_write(void** state);
+void emlog_control_bytes_sanitized(void** state);
+void emlog_journal_mode_single_stream_with_priority(void** state);
+void emlog_journal_mode_autodetected_from_env(void** state);
+void emlog_truncation_notice_has_header(void** state);
+void emlog_concurrent_default_path_lines_intact(void** state);
 
 /* default writer tests */
 void emlog_default_writer_stdout(void** state);

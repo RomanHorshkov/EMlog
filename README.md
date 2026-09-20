@@ -1,4 +1,4 @@
-EMLog — Minimal thread-safe logging and canonical error utilities
+EMLog — Minimal thread-safe logging
 ===================================================================
 
 [![Quality](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml?query=branch%3Amaster)
@@ -12,7 +12,7 @@ EMLog — Minimal thread-safe logging and canonical error utilities
 Overview
 --------
 
-EMLog is a compact, thread-safe logging and error-categorization library written in C. It provides a tiny, easy-to-embed logging API with a small footprint, a fixed set of canonical error categories mapped from `errno`, and predictable behaviour under heavy concurrency.
+EMLog is a compact, thread-safe logging library written in C. It provides a tiny, easy-to-embed logging API with a small footprint, a fixed set of canonical error categories mapped from `errno`, and predictable behaviour under heavy concurrency.
 
 Why EMLog?
 ----------
@@ -21,7 +21,10 @@ Why EMLog?
 - No hot-path heap allocations: log lines are emitted with a single `writev(2)` against a header/message iovec pair, not a malloc'd buffer.
 - Cheap timestamps: ISO8601 prefixes are cached per-thread, per-second in TLS; only the millisecond suffix is recomputed on every call.
 - Pipe-safe by default: messages are truncated to respect `PIPE_BUF` so a single `write` never tears across readers.
-- Canonical error categories: every POSIX `errno` maps to one of a small, stable set of `eml_err_t` values, so callers can branch on category instead of raw errno.
+- errno-transparent: a log call never changes the errno the caller is about to report.
+- Injection-safe: control bytes in a message become `?`, so an argument can never forge a second line.
+- journald-aware: with `JOURNAL_STREAM` set (systemd), every level goes to one stream with a `<N>` priority prefix, so `journalctl -p` filters work and emission order is preserved. No libsystemd.
+- Lock-free default path: each thread formats into its own buffer and emits with one syscall (EINTR-retried, partial-write-completed); only custom-writer callbacks are serialized.
 
 Project layout
 --------------

@@ -75,21 +75,11 @@ static uint64_t run_round(size_t lines, double thread_elapsed[STRESS_MT_THREADS]
     return wall;
 }
 
-int main(void)
+/* One full measurement (warm-up + STRESS_MT_RUNS rounds) for the current writer configuration. `count_lines` = the no-op
+ * writer counts what it receives, so accounting is asserted; the default-writer pass cannot count (bytes go to /dev/null). */
+static int measure(const char* cfg_name, int count_lines, const char* cost_label, const char* rate_label)
 {
-    emlog_set_writer(stress_noop_writer, NULL);
-    emlog_init(EML_LEVEL_INFO, true);
-
-    printf("emlog multi-thread stress benchmark\n");
-    printf("configuration\n");
-    printf("  measured runs:               %u\n", STRESS_MT_RUNS);
-    printf("  threads:                     %u\n", STRESS_MT_THREADS);
-    printf("  lines per thread per run:    %u\n", STRESS_MT_LINES_PER_THREAD);
-    printf("  warmup lines per thread:     %u\n", STRESS_MT_WARMUP_LINES);
-    printf("  total lines per measured run:%u\n", STRESS_MT_THREADS * STRESS_MT_LINES_PER_THREAD);
-    printf("  writer:                      no-op (counts lines; isolates dispatch contention from I/O)\n");
-    printf("  measured region:             each thread's loop of EML_INFO() calls, threads released together\n");
-
+    printf("\nconfiguration: %s\n", cfg_name);
     double warm[STRESS_MT_THREADS];
     (void)run_round(STRESS_MT_WARMUP_LINES, warm);
 
@@ -105,7 +95,7 @@ int main(void)
         printf("run %zu\n", run + 1u);
         for(size_t t = 0; t < STRESS_MT_THREADS; ++t)
         {
-            const double cost = ns_per_line(STRESS_MT_LINES_PER_THREAD, (uint64_t)per_thread[t]);
+            const double cost                         = ns_per_line(STRESS_MT_LINES_PER_THREAD, (uint64_t)per_thread[t]);
             cost_samples[run * STRESS_MT_THREADS + t] = cost;
             printf("  thread %2zu  elapsed: %12.0f ns  ns/line: %9.3f  lines/s: %14.3f\n", t, per_thread[t], cost,
                    lines_per_second(STRESS_MT_LINES_PER_THREAD, (uint64_t)per_thread[t]));
@@ -113,20 +103,58 @@ int main(void)
         aggregate[run] = lines_per_second((size_t)want, wall);
         printf("  wall-clock elapsed: %" PRIu64 " ns\n", wall);
         printf("  aggregate lines/s:  %.3f\n", aggregate[run]);
-        if(seen != want)
+        if(count_lines)
         {
-            fprintf(stderr, "line accounting mismatch in run %zu: writer saw %" PRIu64 " of %" PRIu64 "\n", run + 1u, seen, want);
-            return EXIT_FAILURE;
+            if(seen != want)
+            {
+                fprintf(stderr, "line accounting mismatch in run %zu: writer saw %" PRIu64 " of %" PRIu64 "\n", run + 1u, seen, want);
+                return -1;
+            }
+            printf("  accounting:         writer saw all %" PRIu64 " lines\n", seen);
         }
-        printf("  accounting:         writer saw all %" PRIu64 " lines\n", seen);
     }
-    emlog_set_writer(NULL, NULL);
-
     sample_summary_t s;
     printf("\nsummary\n");
     compute_sample_summary(cost_samples, STRESS_MT_RUNS * STRESS_MT_THREADS, &s);
-    print_summary(stdout, "all per-thread cost samples", "ns/line", &s);
+    print_summary(stdout, cost_label, "ns/line", &s);
     compute_sample_summary(aggregate, STRESS_MT_RUNS, &s);
-    print_summary(stdout, "aggregate throughput per run", "lines/s", &s);
+    print_summary(stdout, rate_label, "lines/s", &s);
+    return 0;
+}
+
+int main(void)
+{
+    emlog_set_writer(stress_noop_writer, NULL);
+    emlog_init(EML_LEVEL_INFO, true);
+
+    printf("emlog multi-thread stress benchmark\n");
+    printf("configuration\n");
+    printf("  measured runs:               %u\n", STRESS_MT_RUNS);
+    printf("  threads:                     %u\n", STRESS_MT_THREADS);
+    printf("  lines per thread per run:    %u\n", STRESS_MT_LINES_PER_THREAD);
+    printf("  warmup lines per thread:     %u\n", STRESS_MT_WARMUP_LINES);
+    printf("  total lines per measured run:%u\n", STRESS_MT_THREADS * STRESS_MT_LINES_PER_THREAD);
+    printf("  writers:                     no-op callback (serialized, accounting asserted) then default writer -> /dev/null (lock-free)\n");
+    printf("  measured region:             each thread's loop of EML_INFO() calls, threads released together\n");
+
+    /* Pass 1: custom no-op writer — the SERIALIZED path (callbacks take the emit lock); accounting asserted. */
+    if(measure("no-op writer (serialized callback path, accounting asserted)", 1,
+               "all per-thread cost samples [no-op writer]", "aggregate throughput per run [no-op writer]") != 0)
+        return EXIT_FAILURE;
+
+    /* Pass 2: default writer to /dev/null — the LOCK-FREE production path (one writev per line per thread). Headline. */
+    emlog_set_writer(NULL, NULL);
+    emlog_set_journal_mode(true); /* single stream, "<N>" prefix: exactly what the daemon does under systemd */
+    const int saved_stderr = stress_redirect_fd_to_devnull(STDERR_FILENO);
+    if(saved_stderr < 0)
+    {
+        fprintf(stderr, "stderr redirection failed\n");
+        return EXIT_FAILURE;
+    }
+    const int rc = measure("default writer, journal mode, stderr -> /dev/null (lock-free path)", 0,
+                           "all per-thread cost samples", "aggregate throughput per run");
+    stress_restore_fd(STDERR_FILENO, saved_stderr);
+    emlog_set_journal_mode(false);
+    if(rc != 0) return EXIT_FAILURE;
     return EXIT_SUCCESS;
 }

@@ -100,6 +100,41 @@ static inline int stress_redirect_stdout_to_devnull(void)
     return saved;
 }
 
+/** @brief Point any fd at /dev/null; returns the saved duplicate or -1. */
+static inline int stress_redirect_fd_to_devnull(int fd)
+{
+    fflush(NULL);
+    const int saved = dup(fd);
+    if(saved < 0) return -1;
+    const int nul = open("/dev/null", O_WRONLY | O_CLOEXEC);
+    if(nul < 0)
+    {
+        close(saved);
+        return -1;
+    }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
+    if(dup2(nul, fd) < 0)
+    {
+        close(nul);
+        close(saved);
+        return -1;
+    }
+#pragma GCC diagnostic pop
+    close(nul);
+    return saved;
+}
+
+static inline void stress_restore_fd(int fd, int saved)
+{
+    fflush(NULL);
+    if(saved >= 0)
+    {
+        dup2(saved, fd);
+        close(saved);
+    }
+}
+
 static inline void stress_restore_stdout(int saved)
 {
     fflush(stdout);

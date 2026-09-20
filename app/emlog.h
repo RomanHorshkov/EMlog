@@ -1,6 +1,6 @@
 /**
  * @file emlog.h
- * @brief Tiny, thread-safe logging and canonical error categorization API.
+ * @brief Tiny, thread-safe logging API: one call per line, errno-transparent, injection-safe, journald-aware.
  *
  * This header exposes a compact logging API with printf-like formatting, optional ISO8601 timestamps, and a mapping layer from POSIX errno
  * values to a small set of canonical error categories. The implementation is thread-safe and allows installing a custom writer callback.
@@ -40,57 +40,18 @@ typedef enum
 } eml_level_t;
 
 /**
- * @brief Canonical error categories used to map errno values to a small set
- * of high-level outcomes.
- *
- * These categories are portable across platforms and can be converted to exit codes with eml_err_to_exit() or mapped back to their string
- * name with eml_err_name().
- */
-typedef enum
-{
-    EML_OK = 0,           /**< No error. */
-    EML_TRY_AGAIN,        /**< Try again / interrupted. */
-    EML_TEMP_RESOURCE,    /**< Temporarily out of resources (memory/files). */
-    EML_TEMP_UNAVAILABLE, /**< Temporary service or network unavailability. */
-    EML_BAD_INPUT,        /**< Invalid input or protocol error. */
-    EML_NOT_FOUND,        /**< Item not found. */
-    EML_PERM,             /**< Permission denied. */
-    EML_CONFLICT,         /**< Conflicting resource / already exists. */
-    EML_FATAL_CONF,       /**< Fatal configuration error. */
-    EML_FATAL_IO,         /**< Fatal I/O error. */
-    EML_FATAL_CRYPTO,     /**< Fatal cryptographic error. */
-    EML_FATAL_BUG,        /**< Internal bug / unexpected state. */
-    EML__COUNT            /**< Internal sentinel (do not use). */
-} eml_err_t;
-
-/**
- * @name Exit codes
- * These map a subset of canonical errors to common exit codes used by programs (helps CLI utilities). They are simple integers and may be
- * returned by eml_err_to_exit().
- */
-/*@{*/
-enum
-{
-    EML_EXIT_OK   = 0, /**< Success */
-    EML_EXIT_CONF = 2, /**< Configuration error */
-    EML_EXIT_IO   = 3, /**< I/O error */
-    EML_EXIT_MEM  = 4, /**< Out of memory / resource */
-    EML_EXIT_BUG  = 5, /**< Internal bug */
-};
-/*@}*/
-
-/**
  * @brief Optional writer callback used to customize output destination.
  *
  * If a writer is installed with emlog_set_writer(), the logger will call this function for each formatted line. The implementation should
  * return the number of bytes written on success or a negative value on failure.
  *
  * Reentrancy rules: the callback runs with the emit lock held but NOT the configuration lock, so it MAY call emlog_set_level(),
- * emlog_set_writer(), emlog_enable_timestamps() and emlog_set_writev_flush(). Calling emlog_log() (or the EML_* macros) from inside the
- * callback does not deadlock — the reentrant line is silently dropped. A writer that blocks stalls every logging thread (emission is
- * serialized) but never configuration calls.
+ * emlog_set_writer(), emlog_enable_timestamps(), emlog_set_journal_mode() and emlog_set_writev_flush(). Calling emlog_log() (or the
+ * EML_* macros) from inside the callback does not deadlock — the reentrant line is silently dropped. Custom-writer callbacks are
+ * serialized, so a writer that blocks stalls other threads that log through it; the DEFAULT path (no custom writer) takes no lock.
  *
- * Lifetime: @p line points into logger-owned static storage and is valid only for the duration of the callback — copy it out if needed.
+ * Lifetime: @p line points into the calling thread's logger-owned buffer and is valid only for the duration of the callback — copy it
+ * out if needed. Control bytes (< 0x20 and 0x7f) in the message have already been replaced by '?', so @p line is exactly one line.
  *
  * @param lvl Log level for the line.
  * @param line Pointer to a NUL-terminated string (not including trailing \n).
@@ -110,10 +71,25 @@ typedef ssize_t (*eml_writer_fn)(eml_level_t lvl, const char* line, size_t n, vo
  * Calling emlog_init() multiple times is safe; each invocation replaces the previous configuration (the most recent call "wins"), which
  * allows different subsystems to reconfigure the logger without tearing down internal state.
  *
+ * journald: when systemd hands the process the journal as stdout/stderr it sets JOURNAL_STREAM; emlog_init() then enables journal mode
+ * (see emlog_set_journal_mode()) automatically. Timezone rules are loaded here (tzset); a /etc/localtime change while the process runs
+ * is not picked up, ordinary DST transitions are. errno is preserved across the call.
+ *
  * @param min_level Minimum level to emit; negative to read EMLOG_LEVEL; above EML_LEVEL_CRIT to disable all output.
  * @param timestamps Enable ISO8601 timestamps when true.
  */
 void emlog_init(int min_level, bool timestamps);
+
+/**
+ * @brief journald-stream mode: emit EVERY level on ONE stream (stderr) with a "<N>" syslog-priority prefix per line.
+ *
+ * Two streams into journald are stamped independently on arrival, so an ERROR and the INFO emitted just before it can appear swapped in
+ * journalctl; one stream keeps emission order. The "<N>" prefix (2 crit, 3 err, 4 warning, 6 info, 7 debug) is the convention journald
+ * parses from stdout/stderr: it strips it and stores the real priority, so `journalctl -p err` and priority colouring work. No libsystemd
+ * dependency. Auto-enabled by emlog_init() when JOURNAL_STREAM is set; call this after init to override either way. Custom writers are
+ * unaffected (they receive the level as a parameter).
+ */
+void emlog_set_journal_mode(bool on);
 
 /**
  * @brief Set the current runtime minimum log level.
@@ -163,6 +139,10 @@ void emlog_set_writev_flush(bool on);
  * The logger is thread-safe and will drop messages whose level is below the current minimum. The @p comp argument is an optional
  * component/tag string; pass NULL or "-" if not applicable.
  *
+ * Guarantees: errno is preserved across the call (`EML_ERROR(...); return -errno;` is safe); every control byte in the formatted message
+ * becomes '?' so an attacker-controlled argument can never forge a second line; a line is written whole with one syscall, retried on
+ * EINTR and completed after a partial write; the default path holds no lock and allocates nothing.
+ *
  * @note This function is declared with a printf attribute so format
  *       string mismatches are detected at compile time when supported.
  *
@@ -207,34 +187,6 @@ void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* f
         int __e = errno;                                                \
         emlog_log_errno(EML_LEVEL_ERROR, tag, __e, __VA_ARGS__); \
     } while(0)
-
-/**
- * @brief Map a POSIX errno value to a canonical eml_err_t category.
- *
- * @param err POSIX errno value (e.g., errno)
- * @return eml_err_t Canonical error category.
- */
-eml_err_t eml_from_errno(int err);
-
-/**
- * @brief Return a string name for a canonical error category.
- *
- * The returned pointer is always valid and points to a static string.
- *
- * @param e Error category value.
- * @return const char* Static string describing the category.
- */
-const char* eml_err_name(eml_err_t e);
-
-/**
- * @brief Map a canonical error category to a suggested program exit code.
- *
- * This is useful for CLI programs that want to return a meaningful exit status derived from a library error.
- *
- * @param e Canonical error category.
- * @return int Suggested exit code.
- */
-int eml_err_to_exit(eml_err_t e);
 
 #ifdef __cplusplus
 }
