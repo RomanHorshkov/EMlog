@@ -10,12 +10,26 @@
 # Usage:
 #   ./utils/build_libs.sh [profile ...]    # default: debug audit sanitize release
 #
-# For each profile the library source is compiled twice — a PIC object for the
-# shared library and a plain object for the static archive — into
-# build/<profile>/obj/, then:
+# For each profile the library source is compiled once, with -fPIC, into
+# build/<profile>/obj/, and those objects feed both artifacts:
 #
 #   build/<profile>/libemlog.so.<VERSION>   (+ .so / .so.<MAJOR> symlinks)
 #   build/<profile>/libemlog.a
+#
+# The archive is -fPIC on purpose. The old "static archive is non-PIC" habit
+# comes from i386, where PIC cost a reserved GOT register; on x86-64 that cost
+# is negligible. What it does buy is a .a consumers can link ANYWHERE — static
+# executable, PIE executable, or into their own shared library. emlog is the
+# worst case for getting this wrong: it keeps a __thread timestamp cache, and
+# -fPIE (the profile default, and gcc's own default here) resolves TLS with the
+# initial-exec model — a fixed offset only valid in the main executable. Such an
+# object cannot go into a .so at all; the link dies with
+#
+#   relocation R_X86_64_TPOFF32 against `_ts_cache_sec_tls' can not be used
+#   when making a shared object; recompile with -fPIC
+#
+# -fPIC selects the general-dynamic TLS model instead, which works in both.
+# -fPIC is appended AFTER the profile CFLAGS so it overrides their -fPIE.
 #
 # The shared link uses LDFLAGS_SHARED from the catalog (full RELRO, -z defs,
 # -z noexecstack, --as-needed). Profile LDFLAGS are NEVER passed to a shared
@@ -93,19 +107,17 @@ build_profile() {
     declare -n ldflags_ref="${ld_var}"
 
     local profile_dir="${BUILD_DIR}/${profile}"
-    local obj_pic_dir="${profile_dir}/obj/pic"
-    local obj_static_dir="${profile_dir}/obj/static"
+    local obj_dir="${profile_dir}/obj"
     local shared_realname="lib${LIB_BASENAME}.so.${VER}"
     local shared_soname="lib${LIB_BASENAME}.so.${MAJOR}"
     local shared_linkname="lib${LIB_BASENAME}.so"
     local static_libname="lib${LIB_BASENAME}.a"
     local shared_path="${profile_dir}/${shared_realname}"
     local static_path="${profile_dir}/${static_libname}"
-    local pic_objects=()
-    local static_objects=()
-    local source_path object_rel pic_object static_object
+    local objects=()
+    local source_path object_rel object
 
-    mkdir -p "${obj_pic_dir}" "${obj_static_dir}"
+    mkdir -p "${obj_dir}"
     rm -f "${profile_dir}/${static_libname}" \
           "${profile_dir}/${shared_linkname}" \
           "${profile_dir}/${shared_linkname}".*
@@ -114,22 +126,14 @@ build_profile() {
 
     for source_path in "${LIB_SOURCES[@]}"; do
         object_rel="$(basename "${source_path%.c}").o"
-        pic_object="${obj_pic_dir}/${object_rel}"
-        static_object="${obj_static_dir}/${object_rel}"
+        object="${obj_dir}/${object_rel}"
 
-        printf '  compiling PIC object:    %s\n' "${pic_object}"
+        # -fPIC last: it must win over any -fPIE in the profile CFLAGS.
+        printf '  compiling PIC object:    %s\n' "${object}"
         gcc "${cppflags_ref[@]}" "${LIB_CPPFLAGS[@]}" "${cflags_ref[@]}" -fPIC \
-            -c "${source_path}" -o "${pic_object}"
+            -c "${source_path}" -o "${object}"
 
-        printf '  compiling static object: %s\n' "${static_object}"
-        # -fPIC on the ARCHIVE object too: the .a must link into PIE executables and into
-        # consumers' shared objects on any toolchain, not only on one built with
-        # --enable-default-pie (Debian/Ubuntu gcc). Same code as the .so object.
-        gcc "${cppflags_ref[@]}" "${LIB_CPPFLAGS[@]}" "${cflags_ref[@]}" -fPIC \
-            -c "${source_path}" -o "${static_object}"
-
-        pic_objects+=("${pic_object}")
-        static_objects+=("${static_object}")
+        objects+=("${object}")
     done
 
     local extra_ldflags=()
@@ -140,11 +144,11 @@ build_profile() {
         -Wl,-soname,"${shared_soname}" \
         -Wl,--version-script,"${ROOT_DIR}/utils/emlog.map" \
         -o "${shared_path}" \
-        "${pic_objects[@]}" \
+        "${objects[@]}" \
         "${LIB_LDLIBS[@]}"
 
     printf '  creating static library: %s\n' "${static_path}"
-    "${AR_TOOL}" rcs "${static_path}" "${static_objects[@]}"
+    "${AR_TOOL}" rcs "${static_path}" "${objects[@]}"
 
     ln -sfn "${shared_realname}" "${profile_dir}/${shared_soname}"
     ln -sfn "${shared_realname}" "${profile_dir}/${shared_linkname}"
