@@ -84,14 +84,18 @@ static inline int stress_redirect_stdout_to_devnull(void)
         close(saved);
         return -1;
     }
-    /* dup2() returns STDOUT_FILENO on success, not a new descriptor — test it inline so the
-     * analyzer does not track the return value as an fd of its own. */
+    /* dup2() onto STDOUT_FILENO returns that same fd, not a new one. GCC's -fanalyzer models the
+     * return as a freshly opened descriptor that must be closed (a known false positive for dup2 to
+     * a standard fd); closing it would close stdout. Scoped suppression with that reason. */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
     if(dup2(nul, STDOUT_FILENO) < 0)
     {
         close(nul);
         close(saved);
         return -1;
     }
+#pragma GCC diagnostic pop
     close(nul);
     return saved;
 }
