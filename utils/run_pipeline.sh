@@ -125,6 +125,9 @@ stage "build"              bash "${SCRIPT_DIR}/build_libs.sh"
 stage "unit-tests"         bash "${SCRIPT_DIR}/build_UTs.sh"
 stage "integration"        bash "${SCRIPT_DIR}/build_ITs.sh"
 stage "integration-release" bash "${SCRIPT_DIR}/build_ITs_release.sh"
+stage "sanitizer-tests"    bash "${SCRIPT_DIR}/build_sanitizer_tests.sh"
+stage "stress-build"       bash "${SCRIPT_DIR}/build_stress.sh"
+stage "stress-run"         bash "${SCRIPT_DIR}/run_stress.sh"
 stage "package"            bash "${SCRIPT_DIR}/build_deb.sh"
 
 report_coverage

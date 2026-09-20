@@ -5,7 +5,7 @@ EMLog — Minimal thread-safe logging and canonical error utilities
 [![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml?query=branch%3Amaster)
 [![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml?query=branch%3Amaster)
 [![License: MIT](https://img.shields.io/badge/license-MIT-informational)](./LICENSE)
-![Coverage](https://img.shields.io/badge/coverage-96%25%20line-brightgreen)
+![Coverage](.github/badges/coverage.svg)
 
 **📦 [Download the latest release](https://github.com/RomanHorshkov/EMlog/releases/latest)** — `.deb` packages, tarball, `SHA256SUMS`.
 
@@ -53,6 +53,8 @@ no script carries ad-hoc flag literals.
 | `utils/build_ITs_release.sh [--build-only\|--run-only]` | The same integration test built and run under the release profile (-O2, hardening) — the real correctness gate. |
 | `utils/build_sanitizer_tests.sh` | Both UT suites + IT under ASan/UBSan/LSan (sanitize profile). |
 | `utils/build_tsan_tests.sh` | The integration test under ThreadSanitizer (tsan profile). |
+| `utils/build_stress.sh [profile ...]` | Build the stress matrix: `tests/stress/stress.c` (single thread, three configurations: level-gated / no-op writer / default writer to /dev/null) and `tests/stress/stress_mt.c` (8 threads contending on one writer) for every profile × static/shared linkage into `build/stress/`. |
+| `utils/run_stress.sh` | Run the whole matrix, assert line accounting, and write `tests/results/stress/stress_summary.tsv` (mean ns/line and lines/s per profile/linkage/benchmark). |
 | `utils/build_deb.sh` | Debian packages `libemlog` (runtime) + `libemlog-dev` (header, static lib, linker symlink) + `SHA256SUMS` into `build/debs/` (VERSION-validated, hardening-checked). |
 | `utils/smoke_test_package.sh` | Compiles against the *installed* `/usr/local` package, never the repo build tree. Run after installing the debs. |
 | `utils/check_hardening.sh <elf>` | `readelf` assertions on built ELFs (full RELRO, NX stack, stack canary, …). |
