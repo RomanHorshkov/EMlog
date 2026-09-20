@@ -84,13 +84,15 @@ static inline int stress_redirect_stdout_to_devnull(void)
         close(saved);
         return -1;
     }
-    const int rc = dup2(nul, STDOUT_FILENO);
-    close(nul);
-    if(rc < 0)
+    /* dup2() returns STDOUT_FILENO on success, not a new descriptor — test it inline so the
+     * analyzer does not track the return value as an fd of its own. */
+    if(dup2(nul, STDOUT_FILENO) < 0)
     {
+        close(nul);
         close(saved);
         return -1;
     }
+    close(nul);
     return saved;
 }
 
