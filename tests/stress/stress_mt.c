@@ -36,7 +36,8 @@ static void* worker(void* arg)
     pthread_mutex_lock(&w->gate->lock);
     w->gate->ready++;
     pthread_cond_broadcast(&w->gate->cond);
-    while(!w->gate->go) pthread_cond_wait(&w->gate->cond, &w->gate->lock);
+    while(!w->gate->go)
+        pthread_cond_wait(&w->gate->cond, &w->gate->lock);
     pthread_mutex_unlock(&w->gate->lock);
 
     const uint64_t t0 = stress_now_ns();
@@ -64,14 +65,17 @@ static uint64_t run_round(size_t lines, double thread_elapsed[STRESS_MT_THREADS]
         }
     }
     pthread_mutex_lock(&gate.lock);
-    while(gate.ready < STRESS_MT_THREADS) pthread_cond_wait(&gate.cond, &gate.lock);
+    while(gate.ready < STRESS_MT_THREADS)
+        pthread_cond_wait(&gate.cond, &gate.lock);
     const uint64_t t0 = stress_now_ns();
-    gate.go = 1;
+    gate.go           = 1;
     pthread_cond_broadcast(&gate.cond);
     pthread_mutex_unlock(&gate.lock);
-    for(size_t i = 0; i < STRESS_MT_THREADS; ++i) pthread_join(tid[i], NULL);
+    for(size_t i = 0; i < STRESS_MT_THREADS; ++i)
+        pthread_join(tid[i], NULL);
     const uint64_t wall = stress_now_ns() - t0;
-    for(size_t i = 0; i < STRESS_MT_THREADS; ++i) thread_elapsed[i] = (double)w[i].elapsed_ns;
+    for(size_t i = 0; i < STRESS_MT_THREADS; ++i)
+        thread_elapsed[i] = (double)w[i].elapsed_ns;
     return wall;
 }
 
@@ -134,12 +138,13 @@ int main(void)
     printf("  lines per thread per run:    %u\n", STRESS_MT_LINES_PER_THREAD);
     printf("  warmup lines per thread:     %u\n", STRESS_MT_WARMUP_LINES);
     printf("  total lines per measured run:%u\n", STRESS_MT_THREADS * STRESS_MT_LINES_PER_THREAD);
-    printf("  writers:                     no-op callback (serialized, accounting asserted) then default writer -> /dev/null (lock-free)\n");
+    printf(
+        "  writers:                     no-op callback (serialized, accounting asserted) then default writer -> /dev/null (lock-free)\n");
     printf("  measured region:             each thread's loop of EML_INFO() calls, threads released together\n");
 
     /* Pass 1: custom no-op writer — the SERIALIZED path (callbacks take the emit lock); accounting asserted. */
-    if(measure("no-op writer (serialized callback path, accounting asserted)", 1,
-               "all per-thread cost samples [no-op writer]", "aggregate throughput per run [no-op writer]") != 0)
+    if(measure("no-op writer (serialized callback path, accounting asserted)", 1, "all per-thread cost samples [no-op writer]",
+               "aggregate throughput per run [no-op writer]") != 0)
         return EXIT_FAILURE;
 
     /* Pass 2: default writer to /dev/null — the LOCK-FREE production path (one writev per line per thread). Headline. */
@@ -151,8 +156,8 @@ int main(void)
         fprintf(stderr, "stderr redirection failed\n");
         return EXIT_FAILURE;
     }
-    const int rc = measure("default writer, journal mode, stderr -> /dev/null (lock-free path)", 0,
-                           "all per-thread cost samples", "aggregate throughput per run");
+    const int rc = measure("default writer, journal mode, stderr -> /dev/null (lock-free path)", 0, "all per-thread cost samples",
+                           "aggregate throughput per run");
     stress_restore_fd(STDERR_FILENO, saved_stderr);
     emlog_set_journal_mode(false);
     if(rc != 0) return EXIT_FAILURE;

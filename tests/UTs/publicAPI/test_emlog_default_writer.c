@@ -3,11 +3,13 @@
  * @brief Unit tests for EMlog default stdout/stderr routing and writev flush behavior.
  */
 
-#include <fcntl.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
+
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>

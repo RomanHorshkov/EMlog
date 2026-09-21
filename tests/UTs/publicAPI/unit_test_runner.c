@@ -6,7 +6,9 @@
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
+
 #include "unit_tests.h"
 
 /* declare external test functions from other unit files */
@@ -37,10 +39,14 @@ extern void emlog_negative_level_clamped(void** state);
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(emlog_set_level_simple),      cmocka_unit_test(emlog_init_default_env),
-        cmocka_unit_test(emlog_init_explicit_dbg),     cmocka_unit_test(emlog_init_env_parsing),
-        cmocka_unit_test(emlog_init_env_variants),     cmocka_unit_test(emlog_timestamps_true),
-        cmocka_unit_test(emlog_timestamps_false),      cmocka_unit_test(emlog_timestamps_toggle),
+        cmocka_unit_test(emlog_set_level_simple),
+        cmocka_unit_test(emlog_init_default_env),
+        cmocka_unit_test(emlog_init_explicit_dbg),
+        cmocka_unit_test(emlog_init_env_parsing),
+        cmocka_unit_test(emlog_init_env_variants),
+        cmocka_unit_test(emlog_timestamps_true),
+        cmocka_unit_test(emlog_timestamps_false),
+        cmocka_unit_test(emlog_timestamps_toggle),
         cmocka_unit_test(emlog_log_errno_captures_context),
         cmocka_unit_test(emlog_errno_preserved_custom_writer),
         cmocka_unit_test(emlog_errno_preserved_default_path_failed_write),
@@ -49,7 +55,8 @@ int main(void)
         cmocka_unit_test(emlog_journal_mode_autodetected_from_env),
         cmocka_unit_test(emlog_truncation_notice_has_header),
         cmocka_unit_test(emlog_concurrent_default_path_lines_intact),
-        cmocka_unit_test(emlog_default_writer_stdout), cmocka_unit_test(emlog_default_writer_stderr),
+        cmocka_unit_test(emlog_default_writer_stdout),
+        cmocka_unit_test(emlog_default_writer_stderr),
         cmocka_unit_test(emlog_writer_receives_nul_terminated),
         cmocka_unit_test(emlog_long_component_no_overread),
         cmocka_unit_test(emlog_truncation_warning_no_overread),

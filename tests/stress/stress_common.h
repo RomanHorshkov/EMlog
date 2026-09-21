@@ -64,7 +64,9 @@ static _Atomic uint64_t g_stress_lines_seen = 0;
 /** @brief A writer that costs nothing: counts the line and reports it consumed (isolates format + dispatch from I/O). */
 static inline ssize_t stress_noop_writer(eml_level_t lvl, const char* line, size_t n, void* user)
 {
-    (void)lvl; (void)line; (void)user;
+    (void)lvl;
+    (void)line;
+    (void)user;
     atomic_fetch_add_explicit(&g_stress_lines_seen, 1u, memory_order_relaxed);
     return (ssize_t)n;
 }

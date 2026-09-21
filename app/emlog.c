@@ -103,10 +103,10 @@ static struct
     _Atomic int     journal;      /**< journald-stream mode: one stream (stderr) + "<N>" priority prefix — atomic, same reason */
     _Atomic int     writev_flush; /**< Whether to fflush before the write — atomic, same reason */
     pthread_mutex_t mutex;        /**< Mutex protecting the NON-atomic fields (writer + init bookkeeping) */
-    eml_writer_fn   writer;       /**< Optional custom writer — REPLACED under g_emit_mutex, read under g_emit_mutex (see emlog_set_writer) */
-    void*           writer_ud;    /**< User data passed to writer — same discipline as writer */
-    unsigned        init_gen;     /**< Counts successful init calls */
-    int             initialized;  /**< Tracks whether init ran at least once */
+    eml_writer_fn   writer; /**< Optional custom writer — REPLACED under g_emit_mutex, read under g_emit_mutex (see emlog_set_writer) */
+    void*           writer_ud;   /**< User data passed to writer — same discipline as writer */
+    unsigned        init_gen;    /**< Counts successful init calls */
+    int             initialized; /**< Tracks whether init ran at least once */
 } G = {.min_level    = EML_LEVEL_INFO,
        .use_ts       = 1,
        .journal      = 0,
@@ -358,20 +358,20 @@ void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
     cfg.use_ts       = atomic_load_explicit(&G.use_ts, memory_order_relaxed);
     cfg.journal      = atomic_load_explicit(&G.journal, memory_order_relaxed);
     cfg.writev_flush = atomic_load_explicit(&G.writev_flush, memory_order_relaxed);
-    _emitting_tls = 1;
+    _emitting_tls    = 1;
     va_list ap;
     va_start(ap, fmt);
     _vlog(&cfg, level, comp, fmt, ap);
     va_end(ap);
     _emitting_tls = 0;
-    errno = saved_errno;
+    errno         = saved_errno;
 }
 
 void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* fmt, ...)
 {
     const int saved_errno = errno;
     char      base[768];
-    va_list ap;
+    va_list   ap;
     va_start(ap, fmt);
     vsnprintf(base, sizeof base, fmt, ap);
     va_end(ap);
@@ -543,12 +543,18 @@ static int _level_to_journal_priority(eml_level_t l)
 {
     switch(l)
     {
-        case EML_LEVEL_DBG: return 7;   /* LOG_DEBUG   */
-        case EML_LEVEL_INFO: return 6;  /* LOG_INFO    */
-        case EML_LEVEL_WARN: return 4;  /* LOG_WARNING */
-        case EML_LEVEL_ERROR: return 3; /* LOG_ERR     */
-        case EML_LEVEL_CRIT: return 2;  /* LOG_CRIT    */
-        default: return 6;
+        case EML_LEVEL_DBG:
+            return 7; /* LOG_DEBUG   */
+        case EML_LEVEL_INFO:
+            return 6; /* LOG_INFO    */
+        case EML_LEVEL_WARN:
+            return 4; /* LOG_WARNING */
+        case EML_LEVEL_ERROR:
+            return 3; /* LOG_ERR     */
+        case EML_LEVEL_CRIT:
+            return 2; /* LOG_CRIT    */
+        default:
+            return 6;
     }
 }
 
@@ -571,8 +577,8 @@ static void _writev_all(int fd, struct iovec* iov, int iovcnt)
         }
         if(iovcnt > 0)
         {
-            iov[0].iov_base = (char*)iov[0].iov_base + done;
-            iov[0].iov_len -= done;
+            iov[0].iov_base  = (char*)iov[0].iov_base + done;
+            iov[0].iov_len  -= done;
         }
     }
 }
@@ -629,8 +635,8 @@ static size_t _format_header(const log_cfg_t* cfg, eml_level_t level, const char
         _fmt_time_iso8601(ts, sizeof ts, &dummy_ms);
     }
     int h = cfg->use_ts
-                ? snprintf(_line_tls, cap, "%s %s [%llu] [%s] ", ts, _level_to_string(level), (unsigned long long)tid, comp ? comp : "-")
-                : snprintf(_line_tls, cap, "%s [%llu] [%s] ", _level_to_string(level), (unsigned long long)tid, comp ? comp : "-");
+              ? snprintf(_line_tls, cap, "%s %s [%llu] [%s] ", ts, _level_to_string(level), (unsigned long long)tid, comp ? comp : "-")
+              : snprintf(_line_tls, cap, "%s [%llu] [%s] ", _level_to_string(level), (unsigned long long)tid, comp ? comp : "-");
     if(h < 0) h = 0;
     if((size_t)h >= cap)
     {
@@ -682,7 +688,7 @@ static void _vlog(const log_cfg_t* cfg, eml_level_t level, const char* comp, con
     if(truncated)
     {
         const size_t h2 = _format_header(cfg, level, comp, tid);
-        int          n  = snprintf(_line_tls + h2, cap - h2 + 1, "TRUNCATED: message exceeded %zu bytes and was cut", (size_t)LOG_MAX_WRITE);
+        int          n = snprintf(_line_tls + h2, cap - h2 + 1, "TRUNCATED: message exceeded %zu bytes and was cut", (size_t)LOG_MAX_WRITE);
         if(n < 0) n = 0;
         size_t len2 = h2 + (size_t)n;
         if(len2 > cap) len2 = cap;

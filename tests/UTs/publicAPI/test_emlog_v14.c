@@ -3,13 +3,15 @@
  * @brief Black-box tests for the v1.4 guarantees: errno transparency, control-byte sanitizing, journald single-stream priority mode,
  *        the TRUNCATED notice's header, and line integrity on the lock-free default path under concurrent writers.
  */
-#include <errno.h>
-#include <fcntl.h>
-#include <pthread.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,7 +42,9 @@ static ssize_t cap_writer(eml_level_t lvl, const char* line, size_t n, void* use
 
 static ssize_t clobbering_writer(eml_level_t lvl, const char* line, size_t n, void* user)
 {
-    (void)lvl; (void)line; (void)user;
+    (void)lvl;
+    (void)line;
+    (void)user;
     errno = EBADF; /* a failing sink must not leak its errno to the logging caller */
     return -1;
 }
@@ -64,7 +68,8 @@ static size_t read_all(int rfd, char* buf, size_t cap)
 {
     size_t  off = 0;
     ssize_t r;
-    while(off < cap - 1 && (r = read(rfd, buf + off, cap - 1 - off)) > 0) off += (size_t)r;
+    while(off < cap - 1 && (r = read(rfd, buf + off, cap - 1 - off)) > 0)
+        off += (size_t)r;
     buf[off] = '\0';
     return off;
 }
@@ -210,7 +215,8 @@ static void test_truncation_notice_has_header(void** state)
 static void* ct_worker(void* arg)
 {
     long id = (long)arg;
-    for(int i = 0; i < CT_LINES; ++i) EML_INFO("ct", "thread %ld line %d payload-%s", id, i, "0123456789abcdef0123456789abcdef");
+    for(int i = 0; i < CT_LINES; ++i)
+        EML_INFO("ct", "thread %ld line %d payload-%s", id, i, "0123456789abcdef0123456789abcdef");
     return NULL;
 }
 static void* ct_reader(void* arg)
@@ -246,8 +252,10 @@ static void test_concurrent_default_path_lines_intact(void** state)
     pthread_t reader;
     assert_int_equal(pthread_create(&reader, NULL, ct_reader, fds), 0);
     pthread_t th[CT_THREADS];
-    for(long i = 0; i < CT_THREADS; ++i) assert_int_equal(pthread_create(&th[i], NULL, ct_worker, (void*)i), 0);
-    for(int i = 0; i < CT_THREADS; ++i) pthread_join(th[i], NULL);
+    for(long i = 0; i < CT_THREADS; ++i)
+        assert_int_equal(pthread_create(&th[i], NULL, ct_worker, (void*)i), 0);
+    for(int i = 0; i < CT_THREADS; ++i)
+        pthread_join(th[i], NULL);
     restore(STDERR_FILENO, se); /* closes the pipe's write end: the reader sees EOF */
     long* res = NULL;
     pthread_join(reader, (void**)&res);
@@ -258,10 +266,31 @@ static void test_concurrent_default_path_lines_intact(void** state)
     free(res);
 }
 
-void emlog_errno_preserved_custom_writer(void** state) { test_errno_preserved_custom_writer(state); }
-void emlog_errno_preserved_default_path_failed_write(void** state) { test_errno_preserved_default_path_failed_write(state); }
-void emlog_control_bytes_sanitized(void** state) { test_control_bytes_sanitized(state); }
-void emlog_journal_mode_single_stream_with_priority(void** state) { test_journal_mode_single_stream_with_priority(state); }
-void emlog_journal_mode_autodetected_from_env(void** state) { test_journal_mode_autodetected_from_env(state); }
-void emlog_truncation_notice_has_header(void** state) { test_truncation_notice_has_header(state); }
-void emlog_concurrent_default_path_lines_intact(void** state) { test_concurrent_default_path_lines_intact(state); }
+void emlog_errno_preserved_custom_writer(void** state)
+{
+    test_errno_preserved_custom_writer(state);
+}
+void emlog_errno_preserved_default_path_failed_write(void** state)
+{
+    test_errno_preserved_default_path_failed_write(state);
+}
+void emlog_control_bytes_sanitized(void** state)
+{
+    test_control_bytes_sanitized(state);
+}
+void emlog_journal_mode_single_stream_with_priority(void** state)
+{
+    test_journal_mode_single_stream_with_priority(state);
+}
+void emlog_journal_mode_autodetected_from_env(void** state)
+{
+    test_journal_mode_autodetected_from_env(state);
+}
+void emlog_truncation_notice_has_header(void** state)
+{
+    test_truncation_notice_has_header(state);
+}
+void emlog_concurrent_default_path_lines_intact(void** state)
+{
+    test_concurrent_default_path_lines_intact(state);
+}

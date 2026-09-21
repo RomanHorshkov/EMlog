@@ -3,11 +3,13 @@
  * @brief Unit tests for EMlog errno mapping, error names, exit-code mapping, and errno log formatting.
  */
 
-#include <errno.h>
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
+
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,9 +38,6 @@ static ssize_t capture_writer(eml_level_t lvl, const char* line, size_t n, void*
     return (ssize_t)n;
 }
 
-
-
-
 static void test_emlog_log_errno_includes_context(void** state)
 {
     (void)state;
@@ -62,9 +61,6 @@ static void test_emlog_log_errno_includes_context(void** state)
     emlog_set_writer(NULL, NULL);
     free(c.buf);
 }
-
-
-
 
 void emlog_log_errno_captures_context(void** state)
 {

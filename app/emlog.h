@@ -181,10 +181,10 @@ void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* f
  *
  * Usage: EML_PERR("mod", "failed to open %s", path);
  */
-#define EML_PERR(tag, ...)                                         \
-    do                                                                  \
-    {                                                                   \
-        int __e = errno;                                                \
+#define EML_PERR(tag, ...)                                       \
+    do                                                           \
+    {                                                            \
+        int __e = errno;                                         \
         emlog_log_errno(EML_LEVEL_ERROR, tag, __e, __VA_ARGS__); \
     } while(0)
 

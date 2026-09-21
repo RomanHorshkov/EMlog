@@ -16,6 +16,7 @@
 #include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
+
 #include <cmocka.h>
 
 static void test_private_level_to_string(void** state)

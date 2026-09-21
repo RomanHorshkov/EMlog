@@ -15,7 +15,12 @@
 #define STRESS_WARMUP_LINES  10000u
 #define STRESS_RUNS          5u
 
-typedef enum { CFG_GATED = 0, CFG_NOOP = 1, CFG_DEVNULL = 2 } cfg_t;
+typedef enum
+{
+    CFG_GATED   = 0,
+    CFG_NOOP    = 1,
+    CFG_DEVNULL = 2
+} cfg_t;
 
 static void configure(cfg_t cfg)
 {
@@ -111,8 +116,12 @@ int main(void)
     printf("  warmup lines:           %u\n", STRESS_WARMUP_LINES);
     printf("  measured region:        loop containing only EML_INFO() calls\n");
 
-    if(run_configuration(CFG_GATED, "level-gated (call returns before formatting)", "cost per line [level-gated]", "throughput [level-gated]") != 0) return EXIT_FAILURE;
-    if(run_configuration(CFG_DEVNULL, "default writer, stdout -> /dev/null (format + writev)", "cost per line [/dev/null sink]", "throughput [/dev/null sink]") != 0) return EXIT_FAILURE;
+    if(run_configuration(CFG_GATED, "level-gated (call returns before formatting)", "cost per line [level-gated]",
+                         "throughput [level-gated]") != 0)
+        return EXIT_FAILURE;
+    if(run_configuration(CFG_DEVNULL, "default writer, stdout -> /dev/null (format + writev)", "cost per line [/dev/null sink]",
+                         "throughput [/dev/null sink]") != 0)
+        return EXIT_FAILURE;
     /* Headline last: the no-op writer isolates the library's own cost (format + dispatch + timestamp cache). */
     if(run_configuration(CFG_NOOP, "no-op writer (format + dispatch, no I/O)", "cost per line", "throughput") != 0) return EXIT_FAILURE;
     return EXIT_SUCCESS;
