@@ -194,7 +194,7 @@ Design notes
 Build profiles & hardening
 ---------------------------
 
-Builds go through `utils/build_libs.sh [profile ...]`, driven by the shared catalog `utils/gcc_build_profiles.sh` (synced verbatim from `Utils/compilation/`, never edited locally); artifacts land in `build/<profile>/`; `utils/check_hardening.sh` gates every release artifact.
+Builds go through `utils/build_libs.sh [profile ...]`, driven by the profile catalog of the pinned `kyr-build` package (`deps.txt`; `utils/gcc_build_profiles.sh` and `utils/check_hardening.sh` are thin wrappers over `build/sysroot/share/kyr-build/`, never copies); artifacts land in `build/<profile>/`; `utils/check_hardening.sh` gates every release artifact.
 
 <details>
 <summary><strong>Profile comparison table</strong> (click to expand)</summary>
@@ -230,3 +230,5 @@ License
 -------
 
 MIT — see [LICENSE](./LICENSE).
+
+Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh` (no sudo; every pin of `deps.txt` lands in `build/sysroot/`). Diagram: `docs/diagrams/tooling_sequence.puml`.
