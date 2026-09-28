@@ -1,27 +1,16 @@
-# EMlog — which functions libemlog.so exposes to the outside
-#
-# This file is given to the linker when libemlog.so is built
-# (-Wl,--version-script). It is a plain allowlist:
-#
-#   global:  names a consumer program may call or link against
-#   local:   everything else — still inside the library, still used
-#            internally, but invisible from outside
-#
-# Without this file the linker exports EVERY non-static function in every .c
-# file, so internal helpers become part of the library's public interface by
-# accident. With it, the public interface is exactly the list below.
-#
-# It only affects the .so. The .a archive is a bag of object files with no
-# notion of "exported", so it is unchanged.
-#
-# Rule: a function is public when it is declared in the public header AND
-# matches a line under global:. Forgetting the second half is caught at link
-# time (the consumer's link fails with "undefined reference"), never at run
-# time.
-{
+# emlog.map — the functions libemlog.so exports, under the version node EMLOG_<major> (the soname major): exactly the
+# functions app/emlog.h declares (the `function` lines of abi/layout.txt; utils/check_abi.sh --exports refuses any difference).
+# Everything else stays local. The .a archive is unaffected.
+EMLOG_1 {
   global:
-    emlog_*;
-    eml_*;
+    emlog_enable_timestamps;
+    emlog_init;
+    emlog_log;
+    emlog_log_errno;
+    emlog_set_journal_mode;
+    emlog_set_level;
+    emlog_set_writer;
+    emlog_set_writev_flush;
   local:
     *;
 };
