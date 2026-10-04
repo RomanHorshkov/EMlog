@@ -32,78 +32,29 @@ Project layout
 - `app/emlog.h` — public API, fully documented with Doxygen comments.
 - `app/emlog.c` — implementation (writer dispatch, timestamp cache, `errno` categorization).
 - `tests/UTs/privateAPI/`, `tests/UTs/publicAPI/` — cmocka-based unit tests (white-box + black-box).
-- `tests/ITs/integration_test.c` — multithreaded integration/stress harness.
-- `utils/` — build, packaging, test, coverage, and hardening scripts.
+- `tests/ITs/integration_test.c` — multithreaded integration/stress harness; `tests/stress/` the benchmarks; `tests/package/smoke.c` the installed-package test.
+- `utils/` — kyr-build's wrappers and `emlog_project.sh` (the declarations).
 - `VERSION` — library version (`MAJOR.MINOR.PATCH`), also the release-tag source of truth.
 
-Build
------
+Build and test
+--------------
 
-Everything you need to build/run is in `utils/`. Every script can be launched
-from any directory; paths are resolved relative to the repo root. All compile
-flags come from the shared profile catalog `utils/gcc_build_profiles.sh` —
-no script carries ad-hoc flag literals.
-
-<details>
-<summary><strong>Script reference</strong> (click to expand)</summary>
-
-| Script | Purpose |
-| ------ | ------- |
-| `utils/build_libs.sh [profile ...]` | Build `libemlog.so.<VERSION>` + `libemlog.a` per profile into `build/<profile>/` (default: debug audit sanitize release); release artifacts are gated by `check_hardening.sh`. |
-| `utils/build_UTs.sh [--build-only\|--run-only]` | Build + run BOTH unit-test suites (private white-box + public black-box, separately compiled binaries, one run) with per-suite and combined gcovr coverage. Debug profile + coverage layer. |
-| `utils/build_UTs_release.sh [--build-only\|--run-only]` | The same two suites compiled and run under the release profile (-O2, NDEBUG, hardening); the public suite links the release static library the deb ships. |
-| `utils/build_ITs.sh [--build-only\|--run-only]` | Build + run the multithreaded integration test with its own gcovr coverage (debug profile + coverage layer). |
-| `utils/build_ITs_release.sh [--build-only\|--run-only]` | The same integration test built and run under the release profile (-O2, hardening) — the real correctness gate. |
-| `utils/build_sanitizer_tests.sh` | Both UT suites + IT under ASan/UBSan/LSan (sanitize profile). |
-| `utils/build_tsan_tests.sh` | The integration test under ThreadSanitizer (tsan profile). |
-| `utils/build_stress.sh [profile ...]` | Build the stress matrix: `tests/stress/stress.c` (single thread, three configurations: level-gated / no-op writer / default writer to /dev/null) and `tests/stress/stress_mt.c` (8 threads contending on one writer) for every profile × static/shared linkage into `build/stress/`. |
-| `utils/run_stress.sh` | Run the whole matrix, assert line accounting, and write `tests/results/stress/stress_summary.tsv` (mean ns/line and lines/s per profile/linkage/benchmark). |
-| `utils/build_deb.sh` | Debian packages `libemlog` (runtime) + `libemlog-dev` (header, static lib, linker symlink) + `SHA256SUMS` into `build/debs/` (VERSION-validated, hardening-checked). |
-| `utils/smoke_test_package.sh` | Compiles against the *installed* `/usr/local` package, never the repo build tree. Run after installing the debs. |
-| `utils/check_hardening.sh <elf>` | `readelf` assertions on built ELFs (full RELRO, NX stack, stack canary, …). |
-| `utils/run_pipeline.sh` | The full board, end to end: libs → unit tests → integration → debs, with a coverage and package report at the end. |
-
-</details>
-
-The test scripts take an optional phase flag:
-
-- *(no flag)* — build the test binaries, then run them (and, for
-  `build_UTs.sh`, generate coverage).
-- `--build-only` — compile the binaries and stop; nothing executes.
-- `--run-only` — run previously built binaries without recompiling
-  (errors out with a hint if the binaries are missing).
-
-Library artifacts:
+`utils/` holds the pinned kyr-build's wrappers and `utils/emlog_project.sh`, which declares what is built, tested and packaged; the steps themselves are kyr-build's (its README, "Wrapper contract"). No sudo; every pin of `deps.txt` lands in `build/sysroot/`.
 
 ```sh
-./utils/build_libs.sh              # all four default profiles
-./utils/build_libs.sh release      # just the release profile
+./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh   # every gate
+./utils/build_libs.sh release          # build/<profile>/libemlog.{a,so.<VERSION>} (no argument: every profile)
+./utils/build_UTs.sh                   # private (white-box) + public suites, coverage: tests/results/UTs
+./utils/build_UTs_release.sh           # the suites against the release archive the deb ships
+./utils/build_ITs.sh                   # the multithreaded integration test (release), then coverage: tests/results/ITs/coverage
+./utils/build_sanitizer_tests.sh       # suites + IT under ASan, UBSan, LSan
+GCC_BUILD_ENABLE_TSAN=1 ./utils/build_tsan_tests.sh
+./utils/build_stress.sh && ./utils/run_stress.sh   # every profile x static/shared: tests/results/stress/stress_summary.tsv
+./utils/build_deb.sh                   # build/debs: libemlog, libemlog-dev, SHA256SUMS, one .buildinfo per deb
+./utils/smoke_test_package.sh          # tests/package/smoke.c against the installed debs only
 ```
 
-- `build/<profile>/libemlog.a` — built `-fPIC`, so it can be linked into your own shared library as well as into static or PIE executables
-- `build/<profile>/libemlog.so.<VERSION>` (+ `.so` / `.so.<MAJOR>` symlinks)
-- flat `build/libemlog.*` symlinks always point into `build/release/`
-
-Packaging
----------
-
-```sh
-./utils/build_deb.sh
-```
-
-produces in `build/debs/`:
-
-- `libemlog_<version>_<arch>.deb` — runtime: `/usr/local/lib/libemlog.so.<version>` + soname symlink, `ldconfig` hooks.
-- `libemlog-dev_<version>_<arch>.deb` — development: `/usr/local/include/emlog.h`, `/usr/local/lib/libemlog.a`, `libemlog.so` linker symlink. Depends on `libemlog (= <version>)`.
-- `SHA256SUMS` — checksums over both debs.
-
-Install both (apt resolves the dependency order):
-
-```sh
-sudo apt-get install ./build/debs/libemlog_<version>_<arch>.deb \
-                     ./build/debs/libemlog-dev_<version>_<arch>.deb
-./utils/smoke_test_package.sh   # proves the INSTALLED package links and runs
-```
+`libemlog`: `/usr/local/lib/libemlog.so.<version>` + soname link, `ldconfig` hooks. `libemlog-dev`: `/usr/local/include/emlog.h`, `libemlog.a` (`-fPIC`, links into shared objects and PIE executables alike), the linker link; Depends `libemlog (= <version>)`. Both Conflicts/Replaces the former `emlog`. The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The coverage badge is the unit coverage number, written by kyr-build's `coverage_badge.py`.
 
 Release process
 ----------------
@@ -112,42 +63,7 @@ Releases are tag-driven. See [RELEASING.md](./RELEASING.md) for the exact
 merge, tag, and publish flow. Each GitHub Release attaches both debs, a
 header+libs tarball, and `SHA256SUMS`.
 
-Testing
--------
-
-Requirements (Ubuntu/Debian):
-
-```sh
-sudo apt install libcmocka-dev gcovr
-```
-
-Run everything:
-
-```sh
-./utils/run_pipeline.sh
-```
-
-Or individually:
-
-```sh
-./utils/build_UTs.sh              # both unit-test suites + coverage
-./utils/build_UTs_release.sh      # same suites under the release profile
-./utils/build_ITs.sh              # integration test + its own coverage
-./utils/build_ITs_release.sh      # integration test under the release profile
-./utils/build_sanitizer_tests.sh  # UTs + IT under ASan/UBSan/LSan
-./utils/build_tsan_tests.sh       # IT under TSan
-```
-
-Coverage outputs — UTs and the integration test each get their own, independent report; nothing here is silently merged, and they stay local (no hosted HTML site):
-
-- `tests/results/private_UTs/UTs_private_coverage.html` + `coverage-summary.json` — private suite alone
-- `tests/results/public_UTs/UTs_public_coverage.html` + `coverage-summary.json` — public suite alone
-- `tests/results/UTs_all/UTs_all_coverage.{html,xml}` + `coverage-summary.json` — both UT suites merged
-- `tests/results/ITs/ITs_coverage.{html,xml}` + `coverage-summary.json` — integration test alone
-
-CI uploads all four as workflow artifacts on every push (download from the run's Artifacts section); the README **Coverage** badge is the combined-UT line-coverage number, updated by hand.
-
-CI (`quality.yml`) runs the same scripts, plus compiler-portability (gcc + clang, `-Werror`), ASan/UBSan/LSan, ThreadSanitizer, and a package build/install/smoke-test stage. `security.yml` runs GCC's `-fanalyzer` on every push, PR, and weekly on a schedule.
+CI (`quality.yml`, cicd `c-quality`) runs the same wrappers, plus compiler portability (gcc + clang, `-Werror`), ThreadSanitizer and the package install + smoke test; `security.yml` runs GCC's `-fanalyzer`.
 
 Usage
 -----
