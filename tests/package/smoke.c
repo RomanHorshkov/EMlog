@@ -1,9 +1,9 @@
 #include <assert.h>
+#include <emlog.h>
 #include <stdio.h>
 #include <string.h>
-#include <emlog.h>
 
-static char     g_last[256];
+static char    g_last[256];
 static ssize_t sink(eml_level_t lvl, const char* line, size_t n, void* user)
 {
     (void)lvl;
