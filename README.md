@@ -150,3 +150,5 @@ MIT — see [LICENSE](./LICENSE).
 Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh` (no sudo; every pin of `deps.txt` lands in `build/sysroot/`). Diagram: `docs/diagrams/tooling_sequence.puml`.
 
 ABI: `abi/layout.txt` is the committed public ABI of `app/emlog.h` (layouts, enumerator values, callbacks, function signatures, numeric constants), checked by kyr-build's gate through `utils/check_abi.sh` (pipeline stages `abi` and `abi-exports`): a changed line needs a raised major, a new public name a raised minor, and `libemlog.so` exports exactly the declared functions as `<name>@@EMLOG_<major>` (`utils/emlog.map`); `utils/emlog_project.sh` says what is public. Debs through kyr-build's `lib/deb.sh` (`X-Kyr-Tier`, byte-reproducible). Diagram: `docs/diagrams/abi_exports.puml`.
+
+Legacy names: `utils/check_legacy_names.sh` (kyr-build 3.0.0's check and patterns, copied until it is pinned) refuses a pre-kyr name in the tracked text; `legacy_names.allow` fences history only.
