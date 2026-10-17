@@ -47,6 +47,7 @@ void emlog_long_component_no_overread(void** state);
 
 /* truncation-warning over-read, bounded formatting, writer reentrancy */
 void emlog_truncation_warning_no_overread(void** state);
+void emlog_notice_survives_absurd_component(void** state);
 void emlog_huge_message_bounded(void** state);
 void emlog_writer_callback_may_reconfigure(void** state);
 void emlog_reentrant_log_dropped(void** state);

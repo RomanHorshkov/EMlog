@@ -159,6 +159,11 @@ EML_THREAD_LOCAL static int _emitting_tls = 0;
  */
 EML_THREAD_LOCAL static char _line_tls[LOG_MAX_WRITE + 1];
 
+/** @brief What the header leaves for the message: the TRUNCATED notice ("TRUNCATED: message exceeded <n> bytes and was cut")
+ *         reuses a header, so even the longest header leaves the whole notice room. */
+#define EML_NOTICE_ROOM ((size_t)64)
+_Static_assert(LOG_MAX_WRITE > 4 + EML_NOTICE_ROOM, "the notice and the marker fit one atomic write");
+
 /*****************************************************************************************************************************************
  * MARK: PRIVATE VARIABLES DEFINITIONS
  *****************************************************************************************************************************************
@@ -255,11 +260,12 @@ static void _writev_all(int fd, struct iovec* iov, int iovcnt);
 static void _emit_line(const log_cfg_t* cfg, eml_level_t level, size_t len);
 /**
  * @brief Format the header (optional timestamp, level, thread id, component) into the calling thread's _line_tls.
- * @return header length; always leaves room for a 3-byte marker and the newline.
+ * @return header length; always leaves room for the TRUNCATED notice, a 3-byte marker and the newline.
  */
 static size_t _format_header(const log_cfg_t* cfg, eml_level_t level, const char* comp, uint64_t tid);
 /** @brief Core varargs logger implementation: header + message + sanitize + emit (+ TRUNCATED notice). Lock-free on the default path. */
-static void _vlog(const log_cfg_t* cfg, eml_level_t level, const char* comp, const char* fmt, va_list ap);
+static void _vlog(const log_cfg_t* cfg, eml_level_t level, const char* comp, const char* fmt, va_list ap)
+    __attribute__((format(printf, 4, 0)));
 
 /*****************************************************************************************************************************************
  * MARK: PUBLIC FUNCTIONS DEFINITIONS
@@ -627,7 +633,7 @@ static void _emit_line(const log_cfg_t* cfg, eml_level_t level, size_t len)
 
 static size_t _format_header(const log_cfg_t* cfg, eml_level_t level, const char* comp, uint64_t tid)
 {
-    const size_t cap    = LOG_MAX_WRITE - 4; /* room for a 3-byte marker + newline */
+    const size_t cap    = LOG_MAX_WRITE - 4 - EML_NOTICE_ROOM; /* room for the notice, a 3-byte marker + newline */
     char         ts[40] = {0};
     if(cfg->use_ts)
     {

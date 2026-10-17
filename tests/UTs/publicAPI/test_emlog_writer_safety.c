@@ -117,6 +117,27 @@ void emlog_truncation_warning_no_overread(void** state)
     assert_non_null(strstr(g_line, "TRUNCATED:"));
 }
 
+void emlog_notice_survives_absurd_component(void** state)
+{
+    (void)state;
+    /* A component longer than a whole line: the header is cut, and it still leaves the TRUNCATED notice whole (it used to
+     * leave 5 bytes, so the notice read "TRUN"). Static storage: the test's own frame stays small. */
+    static char comp[6000];
+    static char msg[8192];
+    memset(comp, 'C', sizeof comp - 1);
+    memset(msg, 'M', sizeof msg - 1);
+
+    g_called = 0;
+    emlog_init(EML_LEVEL_DBG, true);
+    emlog_set_writer(capture_writer, NULL);
+    emlog_log(EML_LEVEL_INFO, comp, "%s", msg);
+    emlog_set_writer(NULL, NULL);
+
+    assert_int_equal(g_called, 2);
+    assert_non_null(strstr(g_line, "TRUNCATED: message exceeded "));
+    assert_non_null(strstr(g_line, " bytes and was cut"));
+}
+
 void emlog_huge_message_bounded(void** state)
 {
     (void)state;
