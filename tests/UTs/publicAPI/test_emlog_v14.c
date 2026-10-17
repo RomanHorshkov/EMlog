@@ -44,6 +44,7 @@ static ssize_t clobbering_writer(eml_level_t lvl, const char* line, size_t n, vo
 {
     (void)lvl;
     (void)line;
+    (void)n;
     (void)user;
     errno = EBADF; /* a failing sink must not leak its errno to the logging caller */
     return -1;
@@ -114,7 +115,8 @@ static void test_errno_preserved_default_path_failed_write(void** state)
 static void test_control_bytes_sanitized(void** state)
 {
     (void)state;
-    cap_t c = {.count = 0};
+    static cap_t c; /* 33 KiB of captured lines: static, the test frame stays small */
+    memset(&c, 0, sizeof c);
     emlog_init(EML_LEVEL_DBG, false);
     emlog_set_writer(cap_writer, &c);
     EML_WARN("upload", "name: %s", "invoice.pdf\nERR [1] [auth] forged\r\x7f\tend");
@@ -192,10 +194,11 @@ static void test_journal_mode_autodetected_from_env(void** state)
 static void test_truncation_notice_has_header(void** state)
 {
     (void)state;
-    cap_t c = {.count = 0};
+    static cap_t c; /* 33 KiB of captured lines: static, the test frame stays small */
+    memset(&c, 0, sizeof c);
     emlog_init(EML_LEVEL_DBG, true);
     emlog_set_writer(cap_writer, &c);
-    char big[9000];
+    static char big[9000];
     memset(big, 'x', sizeof big - 1);
     big[sizeof big - 1] = '\0';
     EML_INFO("big", "%s", big);

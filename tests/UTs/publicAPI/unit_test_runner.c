@@ -11,32 +11,6 @@
 
 #include "unit_tests.h"
 
-/* declare external test functions from other unit files */
-extern void emlog_set_level_simple(void** state);
-extern void emlog_init_default_env(void** state);
-extern void emlog_init_explicit_dbg(void** state);
-extern void emlog_init_env_parsing(void** state);
-extern void emlog_init_env_variants(void** state);
-extern void emlog_timestamps_true(void** state);
-extern void emlog_timestamps_false(void** state);
-extern void emlog_timestamps_toggle(void** state);
-extern void emlog_error_from_errno(void** state);
-extern void emlog_error_name_strings(void** state);
-extern void emlog_error_exit_codes(void** state);
-extern void emlog_log_errno_captures_context(void** state);
-extern void emlog_default_writer_stdout(void** state);
-extern void emlog_default_writer_stderr(void** state);
-extern void emlog_writer_receives_nul_terminated(void** state);
-extern void emlog_long_component_no_overread(void** state);
-extern void emlog_truncation_warning_no_overread(void** state);
-extern void emlog_notice_survives_absurd_component(void** state);
-extern void emlog_huge_message_bounded(void** state);
-extern void emlog_writer_callback_may_reconfigure(void** state);
-extern void emlog_reentrant_log_dropped(void** state);
-extern void emlog_writer_replacement_synchronizes(void** state);
-extern void emlog_level_above_crit_disables(void** state);
-extern void emlog_negative_level_clamped(void** state);
-
 int main(void)
 {
     const struct CMUnitTest tests[] = {

@@ -71,38 +71,13 @@ static inline ssize_t stress_noop_writer(eml_level_t lvl, const char* line, size
     return (ssize_t)n;
 }
 
-/**
- * @brief Point stdout (the default writer's INFO sink) at /dev/null for the "real writer" configuration.
- * @return the saved stdout fd to hand back to stress_restore_stdout(), or -1 on failure.
- */
-static inline int stress_redirect_stdout_to_devnull(void)
-{
-    fflush(stdout);
-    const int saved = dup(STDOUT_FILENO);
-    if(saved < 0) return -1;
-    const int nul = open("/dev/null", O_WRONLY | O_CLOEXEC);
-    if(nul < 0)
-    {
-        close(saved);
-        return -1;
-    }
-    /* dup2() onto STDOUT_FILENO returns that same fd, not a new one. GCC's -fanalyzer models the
-     * return as a freshly opened descriptor that must be closed (a known false positive for dup2 to
-     * a standard fd); closing it would close stdout. Scoped suppression with that reason. */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
-    if(dup2(nul, STDOUT_FILENO) < 0)
-    {
-        close(nul);
-        close(saved);
-        return -1;
-    }
-#pragma GCC diagnostic pop
-    close(nul);
-    return saved;
-}
+/** @brief The descriptor stress_redirect_fd_to_devnull() pointed at /dev/null, -1 when none: stress_restore_fd() checks it. */
+static int g_stress_redirected_fd = -1;
 
-/** @brief Point any fd at /dev/null; returns the saved duplicate or -1. */
+/**
+ * @brief Point fd at /dev/null (stdout for the default writer's INFO sink, stderr for its WARN and above).
+ * @return the saved duplicate to hand back to stress_restore_fd(), or -1 on failure.
+ */
 static inline int stress_redirect_fd_to_devnull(int fd)
 {
     fflush(NULL);
@@ -114,37 +89,27 @@ static inline int stress_redirect_fd_to_devnull(int fd)
         close(saved);
         return -1;
     }
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
-    if(dup2(nul, fd) < 0)
+    g_stress_redirected_fd = dup2(nul, fd); /* fd itself, now on /dev/null */
+    close(nul);
+    if(g_stress_redirected_fd != fd)
     {
-        close(nul);
         close(saved);
         return -1;
     }
-#pragma GCC diagnostic pop
-    close(nul);
     return saved;
 }
 
+/** @brief Give fd back its saved target (the one stress_redirect_fd_to_devnull() redirected) and drop the duplicate. */
 static inline void stress_restore_fd(int fd, int saved)
 {
     fflush(NULL);
-    if(saved >= 0)
+    if(saved < 0) return;
+    if(fd == g_stress_redirected_fd)
     {
         dup2(saved, fd);
-        close(saved);
+        g_stress_redirected_fd = -1;
     }
-}
-
-static inline void stress_restore_stdout(int saved)
-{
-    fflush(stdout);
-    if(saved >= 0)
-    {
-        dup2(saved, STDOUT_FILENO);
-        close(saved);
-    }
+    close(saved);
 }
 
 /**

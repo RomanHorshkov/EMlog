@@ -60,7 +60,7 @@ static int run_configuration(cfg_t cfg, const char* name, const char* cost_label
     int saved_stdout = -1;
     if(cfg == CFG_DEVNULL)
     {
-        saved_stdout = stress_redirect_stdout_to_devnull();
+        saved_stdout = stress_redirect_fd_to_devnull(STDOUT_FILENO);
         if(saved_stdout < 0)
         {
             fprintf(stderr, "stdout redirection failed\n");
@@ -80,7 +80,7 @@ static int run_configuration(cfg_t cfg, const char* name, const char* cost_label
         rate[run]         = lines_per_second(STRESS_LINES_PER_RUN, ns);
     }
     const uint64_t seen = atomic_load_explicit(&g_stress_lines_seen, memory_order_relaxed);
-    if(cfg == CFG_DEVNULL) stress_restore_stdout(saved_stdout);
+    if(cfg == CFG_DEVNULL) stress_restore_fd(STDOUT_FILENO, saved_stdout);
     emlog_set_writer(NULL, NULL);
 
     printf("\nconfiguration: %s\n", name);
