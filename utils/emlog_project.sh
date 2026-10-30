@@ -39,6 +39,14 @@ KYR_SUITE_STRESS_LDLIBS=(-lm -pthread)
 KYR_STRESS_PROFILES=("${GCC_BUILD_PROFILES[@]}")
 KYR_STRESS_LINKAGES=(static shared)
 KYR_STRESS_METRICS=("stress|cost per line|throughput" "stress_mt|all per-thread cost samples|aggregate throughput per run")
+# ThreadSanitizer over the integration suite and the multi-thread stress (one writer per thread, the lock-free default path and
+# the custom writer's mutex): the stage runs in every pipeline
+# (the stress suite's two sources each have a main: the TSan run builds the multi-thread one as a suite of its own).
+KYR_SUITE_MT_SOURCES=(tests/stress/stress_mt.c)
+KYR_SUITE_MT_CPPFLAGS=("${KYR_SUITE_STRESS_CPPFLAGS[@]}")
+KYR_SUITE_MT_LDLIBS=("${KYR_SUITE_STRESS_LDLIBS[@]}")
+KYR_TSAN_SUITES=(it mt)
+GCC_BUILD_ENABLE_TSAN=1 # the catalog, sourced first, sets 0 when unset
 
 # libemlog and libemlog-dev, both replacing the former single package "emlog".
 KYR_PKG="libemlog"
