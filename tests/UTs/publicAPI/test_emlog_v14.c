@@ -145,6 +145,7 @@ static void test_journal_mode_single_stream_with_priority(void** state)
     EML_WARN("j", "warn line");
     EML_ERROR("j", "error line");
     EML_DBG("j", "debug line");
+    EML_CRIT("j", "crit line");
     restore(STDOUT_FILENO, so);
     restore(STDERR_FILENO, se);
     emlog_set_journal_mode(false);
@@ -159,6 +160,7 @@ static void test_journal_mode_single_stream_with_priority(void** state)
     assert_non_null(strstr(err, "<4>WRN"));
     assert_non_null(strstr(err, "<3>ERR"));
     assert_non_null(strstr(err, "<7>DBG"));
+    assert_non_null(strstr(err, "<2>CRT")); /* every row of levels.def with its priority */
     assert_true(strstr(err, "<6>INF") < strstr(err, "<4>WRN") && strstr(err, "<4>WRN") < strstr(err, "<3>ERR"));
 }
 

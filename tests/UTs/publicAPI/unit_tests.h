@@ -19,6 +19,7 @@ void emlog_init_default_env(void** state);
 void emlog_init_explicit_dbg(void** state);
 void emlog_init_env_parsing(void** state);
 void emlog_init_env_variants(void** state);
+void emlog_init_env_unknown_is_announced(void** state);
 
 /* timestamp tests */
 void emlog_timestamps_true(void** state);

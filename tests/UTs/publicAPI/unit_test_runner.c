@@ -19,6 +19,7 @@ int main(void)
         cmocka_unit_test(emlog_init_explicit_dbg),
         cmocka_unit_test(emlog_init_env_parsing),
         cmocka_unit_test(emlog_init_env_variants),
+        cmocka_unit_test(emlog_init_env_unknown_is_announced),
         cmocka_unit_test(emlog_timestamps_true),
         cmocka_unit_test(emlog_timestamps_false),
         cmocka_unit_test(emlog_timestamps_toggle),

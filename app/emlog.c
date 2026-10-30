@@ -84,7 +84,18 @@
  * MARK: PRIVATE ENUMERATED VARIABLES
  *****************************************************************************************************************************************
  */
-/* None */
+/** @brief levels.def counted under a name a row: a level listed twice does not compile, and _level_rows is held to it. */
+enum
+{
+#define X(_level, _tag, _priority, _name, _alias) EML_LEVEL_ROW_##_level,
+#include "levels.def"
+#undef X
+    EML_LEVEL_ROW_COUNT
+};
+#define X(_level, _tag, _priority, _name, _alias) \
+    _Static_assert((int)(_level) == (int)EML_LEVEL_ROW_##_level, "levels.def: rows in value order from 0");
+#include "levels.def"
+#undef X
 
 /*****************************************************************************************************************************************
  * MARK: PRIVATE STRUCTURED TYPES
@@ -130,6 +141,15 @@ typedef struct
     int journal;
     int writev_flush;
 } log_cfg_t;
+
+/** @brief One level (levels.def): the tag its lines carry, its journald priority, the names EMLOG_LEVEL accepts for it. */
+typedef struct
+{
+    const char* tag;
+    int         priority;
+    const char* name;
+    const char* alias; /* or NULL */
+} eml_level_row_t;
 
 /**
  * @brief Serializes CUSTOM-writer callbacks only (the writer-lifetime guarantee
@@ -193,6 +213,14 @@ EML_THREAD_LOCAL static char _ts_cache_prefix_tls[32] = "";
  */
 EML_THREAD_LOCAL static char _ts_cache_tz_tls[8] = "+00:00";
 
+/** @brief The levels, indexed by eml_level_t (levels.def). */
+static const eml_level_row_t _level_rows[] = {
+#define X(_level, _tag, _priority, _name, _alias) [_level] = {_tag, _priority, _name, _alias},
+#include "levels.def"
+#undef X
+};
+_Static_assert(sizeof _level_rows / sizeof _level_rows[0] == EML_LEVEL_ROW_COUNT, "levels.def: one entry per row");
+
 /*****************************************************************************************************************************************
  * MARK: PRIVATE FUNCTION DECLARATIONS
  *****************************************************************************************************************************************
@@ -208,14 +236,13 @@ EML_THREAD_LOCAL static char _ts_cache_tz_tls[8] = "+00:00";
  */
 static const char* _level_to_string(eml_level_t l);
 
-/** @brief Parse textual level name (from env) into eml_level_t.
+/** @brief Parse EMLOG_LEVEL's value into eml_level_t: a row's name, alias or tag (levels.def), in any case.
  *
- * Handles "debug", "info", "warn", "error", "crit" (case-insensitive).
- *
- *  @param s Level name string
- *  @return eml_level_t Parsed level, or EML_LEVEL_INFO on unrecognized/NULL
+ *  @param s Level name string, or NULL (unset)
+ *  @param known Receives false when @p s is set and no row names it (the caller says so); true otherwise
+ *  @return eml_level_t Parsed level, or EML_LEVEL_INFO when unset, empty or unrecognized
  */
-static eml_level_t _string_to_level(const char* s);
+static eml_level_t _string_to_level(const char* s, bool* known);
 
 /**
  * @brief Return a numeric thread identifier suitable for logging.
@@ -291,6 +318,8 @@ void emlog_init(int min_level, bool timestamps)
     const int saved_errno = errno;
     pthread_mutex_lock(&G.mutex);
     eml_level_t new_level;
+    bool        env_known    = true;
+    char        env_seen[33] = ""; /* an EMLOG_LEVEL no level names, cut for the WRN line below */
     if(min_level < 0)
     {
         /* Negative (and only negative) means "read EMLOG_LEVEL from the
@@ -298,7 +327,13 @@ void emlog_init(int min_level, bool timestamps)
          * deliberate "disable all output" request (nothing can reach it),
          * so it is stored as-is, never silently rerouted to the env. */
         const char* env = getenv("EMLOG_LEVEL");
-        new_level       = _string_to_level(env);
+        new_level       = _string_to_level(env, &env_known);
+        if(!env_known)
+        {
+            const size_t n = strnlen(env, sizeof env_seen - 1u);
+            memcpy(env_seen, env, n);
+            env_seen[n] = '\0';
+        }
     }
     else
     {
@@ -319,6 +354,7 @@ void emlog_init(int min_level, bool timestamps)
     pthread_mutex_unlock(&G.mutex);
     EML_INFO("emlog", "Initialized emlog (level=%s, timestamps=%s, journal=%s)", _level_to_string(new_level),
              new_use_ts ? "enabled" : "disabled", atomic_load_explicit(&G.journal, memory_order_relaxed) ? "stream" : "off");
+    if(!env_known) EML_WARN("emlog", "EMLOG_LEVEL=\"%s\" names no level (debug, info, warn, error, crit): logging at INF", env_seen);
     errno = saved_errno;
 }
 
@@ -419,30 +455,18 @@ void emlog_log_errno(eml_level_t level, const char* comp, int err, const char* f
 
 static const char* _level_to_string(eml_level_t level)
 {
-    switch(level)
-    {
-        case EML_LEVEL_DBG:
-            return "DBG";
-        case EML_LEVEL_INFO:
-            return "INF";
-        case EML_LEVEL_WARN:
-            return "WRN";
-        case EML_LEVEL_ERROR:
-            return "ERR";
-        case EML_LEVEL_CRIT:
-            return "CRT";
-        default:
-            return "UNK";
-    }
+    return ((unsigned)level < (unsigned)EML_LEVEL_ROW_COUNT) ? _level_rows[level].tag : "UNK";
 }
-static eml_level_t _string_to_level(const char* s)
+static eml_level_t _string_to_level(const char* s, bool* known)
 {
-    if(!s) return EML_LEVEL_INFO;
-    if(!strcasecmp(s, "debug")) return EML_LEVEL_DBG;
-    if(!strcasecmp(s, "info")) return EML_LEVEL_INFO;
-    if(!strcasecmp(s, "warn") || !strcasecmp(s, "warning")) return EML_LEVEL_WARN;
-    if(!strcasecmp(s, "error")) return EML_LEVEL_ERROR;
-    if(!strcasecmp(s, "crit") || !strcasecmp(s, "fatal")) return EML_LEVEL_CRIT;
+    *known = true;
+    if(!s || !*s) return EML_LEVEL_INFO;
+    for(size_t i = 0; i < (size_t)EML_LEVEL_ROW_COUNT; ++i)
+    {
+        const eml_level_row_t* r = &_level_rows[i];
+        if(!strcasecmp(s, r->name) || !strcasecmp(s, r->tag) || (r->alias && !strcasecmp(s, r->alias))) return (eml_level_t)i;
+    }
+    *known = false;
     return EML_LEVEL_INFO;
 }
 
@@ -566,21 +590,7 @@ static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out)
 
 static int _level_to_journal_priority(eml_level_t l)
 {
-    switch(l)
-    {
-        case EML_LEVEL_DBG:
-            return 7; /* LOG_DEBUG   */
-        case EML_LEVEL_INFO:
-            return 6; /* LOG_INFO    */
-        case EML_LEVEL_WARN:
-            return 4; /* LOG_WARNING */
-        case EML_LEVEL_ERROR:
-            return 3; /* LOG_ERR     */
-        case EML_LEVEL_CRIT:
-            return 2; /* LOG_CRIT    */
-        default:
-            return 6;
-    }
+    return ((unsigned)l < (unsigned)EML_LEVEL_ROW_COUNT) ? _level_rows[l].priority : 6; /* LOG_INFO */
 }
 
 static int _writev_all(int fd, struct iovec* iov, int iovcnt)

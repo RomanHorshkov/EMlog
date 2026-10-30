@@ -170,6 +170,10 @@ static void test_init_env_variants(void** state)
         {"fatal", EML_LEVEL_CRIT, EML_LEVEL_ERROR, "fatal"},
         {"crit", EML_LEVEL_CRIT, EML_LEVEL_ERROR, "crit"},
         {"unexpected", EML_LEVEL_INFO, EML_LEVEL_DBG, "default"},
+        {"DBG", EML_LEVEL_DBG, -1, "dbg_tag"}, /* the tag a line carries is a name too (1.5.1) */
+        {"err", EML_LEVEL_ERROR, EML_LEVEL_WARN, "err_tag"},
+        {"Crt", EML_LEVEL_CRIT, EML_LEVEL_ERROR, "crt_tag"},
+        {"", EML_LEVEL_INFO, EML_LEVEL_DBG, "empty"},
     };
 
     for(size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
@@ -181,4 +185,51 @@ static void test_init_env_variants(void** state)
 void emlog_init_env_variants(void** state)
 {
     test_init_env_variants(state);
+}
+
+/** @brief An EMLOG_LEVEL no level names logs at INF as before, and emlog_init says so in one WRN line naming the value (cut at 32
+ *         bytes); a known value, unset or empty says nothing. Before 1.5.1 `EMLOG_LEVEL=verbose` (or `dbg`) was INF without a word. */
+static void test_init_env_unknown_is_announced(void** state)
+{
+    (void)state;
+    struct capture c = {0};
+    c.cap            = 2048;
+    c.buf            = malloc(c.cap);
+    assert_non_null(c.buf);
+
+    const char* quiet[] = {"debug", "WARNING", "fatal", "", NULL};
+    for(size_t i = 0; i < sizeof quiet / sizeof quiet[0]; ++i)
+    {
+        c.len    = 0;
+        c.buf[0] = '\0';
+        if(quiet[i])
+            setenv("EMLOG_LEVEL", quiet[i], 1);
+        else
+            unsetenv("EMLOG_LEVEL");
+        emlog_set_writer(capture_writer, &c);
+        emlog_init(-1, false);
+        assert_null(strstr(c.buf, "names no level"));
+    }
+
+    c.len    = 0;
+    c.buf[0] = '\0';
+    setenv("EMLOG_LEVEL", "verbose-and-then-some-more-bytes-past-thirty-two", 1);
+    emlog_set_writer(capture_writer, &c);
+    emlog_init(-1, false);
+    emlog_log(EML_LEVEL_DBG, "UT", "BLOCKED");
+    emlog_log(EML_LEVEL_INFO, "UT", "ALLOWED");
+    const char* warn = strstr(c.buf, "EMLOG_LEVEL=\"verbose-and-then-some-more-bytes\" names no level");
+    assert_non_null(warn);
+    assert_non_null(strstr(c.buf, "WRN"));
+    assert_null(strstr(c.buf, "BLOCKED"));
+    assert_non_null(strstr(c.buf, "ALLOWED"));
+
+    unsetenv("EMLOG_LEVEL");
+    emlog_set_writer(NULL, NULL);
+    free(c.buf);
+}
+
+void emlog_init_env_unknown_is_announced(void** state)
+{
+    test_init_env_unknown_is_announced(state);
 }

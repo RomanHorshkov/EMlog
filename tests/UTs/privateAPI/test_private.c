@@ -31,18 +31,50 @@ static void test_private_level_to_string(void** state)
     assert_string_equal(_level_to_string(-1), "UNK");
 }
 
+static eml_level_t _level_of(const char* s, bool expect_known)
+{
+    bool              known = !expect_known;
+    const eml_level_t l     = _string_to_level(s, &known);
+    assert_int_equal(known, expect_known);
+    return l;
+}
+
 static void test_private_string_to_level(void** state)
 {
     (void)state;
-    assert_int_equal(_string_to_level("debug"), EML_LEVEL_DBG);
-    assert_int_equal(_string_to_level("info"), EML_LEVEL_INFO);
-    assert_int_equal(_string_to_level("warn"), EML_LEVEL_WARN);
-    assert_int_equal(_string_to_level("warning"), EML_LEVEL_WARN);
-    assert_int_equal(_string_to_level("error"), EML_LEVEL_ERROR);
-    assert_int_equal(_string_to_level("crit"), EML_LEVEL_CRIT);
-    assert_int_equal(_string_to_level("fatal"), EML_LEVEL_CRIT);
-    assert_int_equal(_string_to_level("unknown"), EML_LEVEL_INFO);
-    assert_int_equal(_string_to_level(NULL), EML_LEVEL_INFO);
+    assert_int_equal(_level_of("debug", true), EML_LEVEL_DBG);
+    assert_int_equal(_level_of("info", true), EML_LEVEL_INFO);
+    assert_int_equal(_level_of("warn", true), EML_LEVEL_WARN);
+    assert_int_equal(_level_of("warning", true), EML_LEVEL_WARN);
+    assert_int_equal(_level_of("error", true), EML_LEVEL_ERROR);
+    assert_int_equal(_level_of("crit", true), EML_LEVEL_CRIT);
+    assert_int_equal(_level_of("fatal", true), EML_LEVEL_CRIT);
+    assert_int_equal(_level_of("unknown", false), EML_LEVEL_INFO);
+    assert_int_equal(_level_of("verbose", false), EML_LEVEL_INFO);
+    assert_int_equal(_level_of(NULL, true), EML_LEVEL_INFO); /* unset: the default, nothing to say */
+    assert_int_equal(_level_of("", true), EML_LEVEL_INFO);
+}
+
+/** @brief The ledger of levels.def: every row's tag, priority, name and alias reach the helpers; a level past the rows is "UNK" at
+ *         LOG_INFO. */
+static void test_private_level_rows(void** state)
+{
+    (void)state;
+    size_t rows = 0u;
+#define X(_level, _tag, _priority, _name, _alias)                           \
+    assert_string_equal(_level_to_string(_level), _tag);                    \
+    assert_int_equal(_level_to_journal_priority(_level), _priority);        \
+    assert_int_equal(_level_of(_name, true), _level);                       \
+    assert_int_equal(_level_of(_tag, true), _level);                        \
+    if((_alias) != NULL) assert_int_equal(_level_of(_alias, true), _level); \
+    ++rows;
+#include "levels.def"
+#undef X
+    assert_int_equal(rows, EML_LEVEL_ROW_COUNT);
+    assert_int_equal(_level_to_journal_priority((eml_level_t)EML_LEVEL_ROW_COUNT), 6);
+    assert_int_equal(_level_to_journal_priority((eml_level_t)-1), 6);
+    assert_int_equal(_level_to_journal_priority(EML_LEVEL_CRIT), 2);
+    assert_int_equal(_level_to_journal_priority(EML_LEVEL_DBG), 7);
 }
 
 static void test_private_default_stream(void** state)
@@ -190,6 +222,7 @@ int main(void)
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_private_level_to_string),
         cmocka_unit_test(test_private_string_to_level),
+        cmocka_unit_test(test_private_level_rows),
         cmocka_unit_test(test_private_default_stream),
         cmocka_unit_test(test_private_get_thread_id),
 

@@ -65,8 +65,10 @@ typedef ssize_t (*eml_writer_fn)(eml_level_t lvl, const char* line, size_t n, vo
  * @brief Initialize the global logger state.
  *
  * This must be called early if you want to set a non-default minimum level or disable timestamps. If @p min_level is negative the current
- * value of the EMLOG_LEVEL environment variable will be parsed and used (accepted values: debug, info, warn, error, crit). A value above
- * EML_LEVEL_CRIT disables all output (no level can reach it) — useful for benchmarks and silent operation.
+ * value of the EMLOG_LEVEL environment variable will be parsed and used (any case: debug, info, warn or warning, error, crit or fatal, or
+ * the tag a line carries: DBG, INF, WRN, ERR, CRT). Unset or empty is INFO; a value no level names is INFO too, and init says so in one
+ * WRN line naming it (1.5.1). A value above EML_LEVEL_CRIT disables all output (no level can reach it) — useful for benchmarks and silent
+ * operation.
  *
  * Calling emlog_init() multiple times is safe; each invocation replaces the previous configuration (the most recent call "wins"), which
  * allows different subsystems to reconfigure the logger without tearing down internal state.

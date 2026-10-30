@@ -1,0 +1,19 @@
+/**
+ * @brief The log levels (eml_level_t, emlog.h): the tag a line carries, the journald priority of its "<N>" prefix and the names
+ *        EMLOG_LEVEL accepts for it.
+ *
+ * X(level, tag, priority, name, alias)
+ *   level     the eml_level_t enumerator: rows in value order from 0
+ *   tag       the three letters a line carries after its timestamp; EMLOG_LEVEL accepts it too (any case)
+ *   priority  the syslog priority journald reads from the "<N>" prefix (LOG_DEBUG 7 ... LOG_CRIT 2, syslog.h)
+ *   name      the level's name in EMLOG_LEVEL (any case)
+ *   alias     another name EMLOG_LEVEL accepts for it, or NULL
+ *
+ * A level past the rows logs as "UNK" at LOG_INFO; an EMLOG_LEVEL no row names is INFO, and emlog_init says so in a WRN line.
+ */
+
+X(EML_LEVEL_DBG,   "DBG", 7, "debug", NULL)
+X(EML_LEVEL_INFO,  "INF", 6, "info",  NULL)
+X(EML_LEVEL_WARN,  "WRN", 4, "warn",  "warning")
+X(EML_LEVEL_ERROR, "ERR", 3, "error", NULL)
+X(EML_LEVEL_CRIT,  "CRT", 2, "crit",  "fatal")
