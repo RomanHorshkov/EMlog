@@ -6,7 +6,7 @@
  *          reads out of bounds (run under AddressSanitizer to catch the read).
  */
 
-#define _POSIX_C_SOURCE 200809L /* nanosleep, pthreads for the replacement-synchronization test */
+/* nanosleep and pthreads come with the suite's -D_GNU_SOURCE (utils/emlog_project.sh). */
 
 #include <setjmp.h>
 #include <stdarg.h>
