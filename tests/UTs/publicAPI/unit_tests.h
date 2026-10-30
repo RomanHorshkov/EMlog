@@ -50,6 +50,10 @@ void emlog_truncation_warning_no_overread(void** state);
 void emlog_notice_survives_absurd_component(void** state);
 void emlog_huge_message_bounded(void** state);
 void emlog_writer_callback_may_reconfigure(void** state);
+
+void emlog_drain_dropped_notice(void);
+void emlog_refused_writer_lines_counted_and_announced(void** state);
+void emlog_full_nonblocking_sink_counted_and_announced(void** state);
 void emlog_reentrant_log_dropped(void** state);
 
 /* writer replacement lifetime + level edge semantics */

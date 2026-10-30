@@ -42,6 +42,8 @@ int main(void)
         cmocka_unit_test(emlog_writer_replacement_synchronizes),
         cmocka_unit_test(emlog_level_above_crit_disables),
         cmocka_unit_test(emlog_negative_level_clamped),
+        cmocka_unit_test(emlog_refused_writer_lines_counted_and_announced),
+        cmocka_unit_test(emlog_full_nonblocking_sink_counted_and_announced),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

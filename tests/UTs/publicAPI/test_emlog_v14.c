@@ -90,6 +90,7 @@ static void test_errno_preserved_custom_writer(void** state)
     EML_DBG("t", "still preserved");
     assert_int_equal(errno, EPERM);
     emlog_set_writer(NULL, NULL);
+    emlog_drain_dropped_notice(); /* the refused lines' notice goes now, not into a later test's capture */
 }
 
 static void test_errno_preserved_default_path_failed_write(void** state)
@@ -110,6 +111,7 @@ static void test_errno_preserved_default_path_failed_write(void** state)
     assert_true(dup2(saved, STDOUT_FILENO) >= 0);
     close(saved);
     assert_int_equal(after, ENOENT);
+    emlog_drain_dropped_notice();
 }
 
 static void test_control_bytes_sanitized(void** state)

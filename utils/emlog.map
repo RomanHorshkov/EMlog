@@ -3,6 +3,7 @@
 # Everything else stays local. The .a archive is unaffected.
 EMLOG_1 {
   global:
+    emlog_dropped_lines;
     emlog_enable_timestamps;
     emlog_init;
     emlog_log;

@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <poll.h>
 #include <strings.h>
 #include <sys/uio.h>
 #include <time.h>
@@ -140,6 +141,11 @@ typedef struct
  */
 static pthread_mutex_t g_emit_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/* Lines a sink refused since the process started (emlog_dropped_lines), and those not yet announced: the next line that reaches a
+ * sink is preceded by one WRN notice with the count, so a loss is never silent. */
+static _Atomic unsigned long g_dropped_total;
+static _Atomic unsigned long g_dropped_pending;
+
 /**
  * @brief Reentry guard: set while this thread is inside the emit path. A
  *        custom writer logging from its own callback would self-deadlock on
@@ -162,6 +168,9 @@ EML_THREAD_LOCAL static char _line_tls[LOG_MAX_WRITE + 1];
 /** @brief What the header leaves for the message: the TRUNCATED notice ("TRUNCATED: message exceeded <n> bytes and was cut")
  *         reuses a header, so even the longest header leaves the whole notice room. */
 #define EML_NOTICE_ROOM ((size_t)64)
+
+/** A non-blocking sink still full after this wait refuses the line: a logger waits once, briefly, and never blocks its caller long. */
+#define EML_EAGAIN_WAIT_MS 20
 _Static_assert(LOG_MAX_WRITE > 4 + EML_NOTICE_ROOM, "the notice and the marker fit one atomic write");
 
 /*****************************************************************************************************************************************
@@ -250,9 +259,14 @@ static void _fmt_time_iso8601(char* out, size_t n, unsigned* msec_out);
 static int _level_to_journal_priority(eml_level_t l);
 /**
  * @brief Write every byte of @p iov to @p fd: retries EINTR and continues after a partial write, so a line is never dropped or split
- *        by a signal or a momentarily full stream socket. Best-effort beyond that (a dead sink cannot be logged about).
+ *        by a signal or a momentarily full stream socket; a non-blocking sink answering EAGAIN is waited for once, EML_EAGAIN_WAIT_MS.
+ * @return 0 when the line went whole; -1 when the sink refused it (an error, or still full after the wait): the caller counts it.
  */
-static void _writev_all(int fd, struct iovec* iov, int iovcnt);
+static int _writev_all(int fd, struct iovec* iov, int iovcnt);
+/** @brief Count one line the sink refused (emlog_dropped_lines, and the notice the next line that reaches the sink carries). */
+static void _dropped(void);
+/** @brief Before a line: the notice of the lines refused since the last one that reached a sink, through @p writer or to @p fd. */
+static void _announce_dropped(const log_cfg_t* cfg, eml_writer_fn writer, void* writer_ud, int fd);
 /**
  * @brief Emit one finished line from the calling thread's _line_tls: default path (lock-free write to the level's stream, or the single
  *        journal stream with the "<N>" prefix) or the custom writer (serialized by g_emit_mutex, NUL-terminated per the contract).
@@ -348,6 +362,11 @@ void emlog_set_writer(eml_writer_fn fn, void* user)
 void emlog_set_writev_flush(bool on)
 {
     atomic_store_explicit(&G.writev_flush, on ? 1 : 0, memory_order_relaxed);
+}
+
+unsigned long emlog_dropped_lines(void)
+{
+    return atomic_load_explicit(&g_dropped_total, memory_order_relaxed);
 }
 
 void emlog_log(eml_level_t level, const char* comp, const char* fmt, ...)
@@ -564,15 +583,22 @@ static int _level_to_journal_priority(eml_level_t l)
     }
 }
 
-static void _writev_all(int fd, struct iovec* iov, int iovcnt)
+static int _writev_all(int fd, struct iovec* iov, int iovcnt)
 {
+    int waited = 0;
     while(iovcnt > 0)
     {
         ssize_t w = writev(fd, iov, iovcnt);
         if(w < 0)
         {
             if(errno == EINTR) continue;
-            return; /* dead or closed sink: nothing further can be done; the caller's errno is restored by emlog_log */
+            if(errno == EAGAIN && !waited) /* EWOULDBLOCK is EAGAIN on Linux */
+            {
+                struct pollfd p = {.fd = fd, .events = POLLOUT, .revents = 0};
+                waited          = 1;
+                if(poll(&p, 1, EML_EAGAIN_WAIT_MS) > 0) continue;
+            }
+            return -1; /* a dead, closed or still full sink: the caller counts the line; emlog_log restores the caller's errno */
         }
         size_t done = (size_t)w;
         while(iovcnt > 0 && done >= iov[0].iov_len)
@@ -587,6 +613,44 @@ static void _writev_all(int fd, struct iovec* iov, int iovcnt)
             iov[0].iov_len  -= done;
         }
     }
+    return 0;
+}
+
+static void _dropped(void)
+{
+    atomic_fetch_add_explicit(&g_dropped_total, 1ul, memory_order_relaxed);
+    atomic_fetch_add_explicit(&g_dropped_pending, 1ul, memory_order_relaxed);
+}
+
+static void _announce_dropped(const log_cfg_t* cfg, eml_writer_fn writer, void* writer_ud, int fd)
+{
+    if(atomic_load_explicit(&g_dropped_pending, memory_order_relaxed) == 0ul) return; /* the common case: one relaxed load */
+    const unsigned long n = atomic_exchange_explicit(&g_dropped_pending, 0ul, memory_order_relaxed);
+    if(n == 0ul) return;
+    char ts[40] = {0};
+    if(cfg->use_ts)
+    {
+        unsigned dummy_ms;
+        _fmt_time_iso8601(ts, sizeof ts, &dummy_ms);
+    }
+    char note[256];
+    int  k = snprintf(note, sizeof note, "%s%s%s%s [%llu] [emlog] %lu line(s) lost before this one: the sink refused them", writer ? "" :
+                      cfg->journal ? "<4>" : "", ts, ts[0] ? " " : "", _level_to_string(EML_LEVEL_WARN),
+                      (unsigned long long)_get_thread_id(), n);
+    if(k < 0) k = 0;
+    size_t len = (size_t)k < sizeof note - 1 ? (size_t)k : sizeof note - 2;
+    int    ok;
+    if(writer)
+    {
+        ok = writer(EML_LEVEL_WARN, note, len, writer_ud) >= 0;
+    }
+    else
+    {
+        note[len++]      = '\n';
+        struct iovec iov = {.iov_base = note, .iov_len = len};
+        ok               = _writev_all(fd, &iov, 1) == 0;
+    }
+    if(!ok) atomic_fetch_add_explicit(&g_dropped_pending, n, memory_order_relaxed); /* announced by a later line, never lost */
 }
 
 static void _emit_line(const log_cfg_t* cfg, eml_level_t level, size_t len)
@@ -600,8 +664,9 @@ static void _emit_line(const log_cfg_t* cfg, eml_level_t level, size_t len)
     pthread_mutex_unlock(&G.mutex);
     if(writer)
     {
+        _announce_dropped(cfg, writer, writer_ud, -1);
         _line_tls[len] = '\0';
-        (void)writer(level, _line_tls, len, writer_ud);
+        if(writer(level, _line_tls, len, writer_ud) < 0) _dropped();
         pthread_mutex_unlock(&g_emit_mutex);
         return;
     }
@@ -612,6 +677,7 @@ static void _emit_line(const log_cfg_t* cfg, eml_level_t level, size_t len)
     FILE* out = cfg->journal ? stderr : _default_stream(level);
     int   fd  = fileno(out);
     if(cfg->writev_flush) fflush(out);
+    _announce_dropped(cfg, NULL, NULL, cfg->journal ? fd : fileno(_default_stream(EML_LEVEL_WARN)));
     _line_tls[len] = '\n';
     char         pfx[3];
     struct iovec iov[2];
@@ -628,7 +694,7 @@ static void _emit_line(const log_cfg_t* cfg, eml_level_t level, size_t len)
     iov[cnt].iov_base = _line_tls;
     iov[cnt].iov_len  = len + 1;
     ++cnt;
-    _writev_all(fd, iov, cnt);
+    if(_writev_all(fd, iov, cnt) != 0) _dropped();
 }
 
 static size_t _format_header(const log_cfg_t* cfg, eml_level_t level, const char* comp, uint64_t tid)

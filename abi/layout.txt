@@ -9,6 +9,7 @@ enum eml_level_t
   value EML_LEVEL_ERROR 3
   value EML_LEVEL_CRIT 4
 callback eml_writer_fn returns ssize_t params 4 (eml_level_t, const char *, size_t, void *)
+function emlog_dropped_lines returns long unsigned int params 0 ()
 function emlog_enable_timestamps returns void params 1 (_Bool)
 function emlog_init returns void params 2 (int, _Bool)
 function emlog_log returns void params 4 (eml_level_t, const char *, const char *, ...)

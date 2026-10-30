@@ -134,6 +134,16 @@ void emlog_set_writer(eml_writer_fn fn, void* user);
 void emlog_set_writev_flush(bool on);
 
 /**
+ * @brief Lines a sink refused since the process started: a write error on the default path (other than EINTR), a non-blocking stream
+ *        still full after one short wait (20 ms), or a custom writer answering negative. Each loss is also announced: the next line that
+ *        reaches a sink is preceded by one WRN line, component "emlog", naming how many went. Lines below the level filter and a
+ *        writer callback's reentrant lines are not counted (they are dropped by design, not refused).
+ *
+ * @return the count, monotonic (never reset).
+ */
+unsigned long emlog_dropped_lines(void);
+
+/**
  * @brief Core printf-style logger.
  *
  * The logger is thread-safe and will drop messages whose level is below the current minimum. The @p comp argument is an optional

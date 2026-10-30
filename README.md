@@ -25,6 +25,7 @@ Why EMLog?
 - Injection-safe: control bytes in a message become `?`, so an argument can never forge a second line.
 - journald-aware: with `JOURNAL_STREAM` set (systemd), every level goes to one stream with a `<N>` priority prefix, so `journalctl -p` filters work and emission order is preserved. No libsystemd.
 - Lock-free default path: each thread formats into its own buffer and emits with one syscall (EINTR-retried, partial-write-completed); only custom-writer callbacks are serialized.
+- Losses are counted and announced: a line a sink refuses (a write error, a non-blocking stream still full after one 20 ms wait, a custom writer answering negative) is counted by `emlog_dropped_lines()` (1.5.0), and the next line that reaches a sink is preceded by one `WRN [emlog] N line(s) lost before this one` line.
 
 Project layout
 --------------
