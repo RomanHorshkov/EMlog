@@ -21,10 +21,10 @@
 
 typedef struct
 {
-    char  lines[4][512];
-    int   levels[4];
-    int   count;
-    int   refuse; /* answer -1 while set */
+    char lines[4][512];
+    int  levels[4];
+    int  count;
+    int  refuse; /* answer -1 while set */
 } rec_t;
 
 static ssize_t rec_writer(eml_level_t lvl, const char* line, size_t n, void* user)

@@ -13,6 +13,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <poll.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdatomic.h>
@@ -20,7 +21,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <poll.h>
 #include <strings.h>
 #include <sys/uio.h>
 #include <time.h>
@@ -167,7 +167,7 @@ EML_THREAD_LOCAL static char _line_tls[LOG_MAX_WRITE + 1];
 
 /** @brief What the header leaves for the message: the TRUNCATED notice ("TRUNCATED: message exceeded <n> bytes and was cut")
  *         reuses a header, so even the longest header leaves the whole notice room. */
-#define EML_NOTICE_ROOM ((size_t)64)
+#define EML_NOTICE_ROOM    ((size_t)64)
 
 /** A non-blocking sink still full after this wait refuses the line: a logger waits once, briefly, and never blocks its caller long. */
 #define EML_EAGAIN_WAIT_MS 20
@@ -634,9 +634,11 @@ static void _announce_dropped(const log_cfg_t* cfg, eml_writer_fn writer, void* 
         _fmt_time_iso8601(ts, sizeof ts, &dummy_ms);
     }
     char note[256];
-    int  k = snprintf(note, sizeof note, "%s%s%s%s [%llu] [emlog] %lu line(s) lost before this one: the sink refused them", writer ? "" :
-                      cfg->journal ? "<4>" : "", ts, ts[0] ? " " : "", _level_to_string(EML_LEVEL_WARN),
-                      (unsigned long long)_get_thread_id(), n);
+    int  k = snprintf(note, sizeof note, "%s%s%s%s [%llu] [emlog] %lu line(s) lost before this one: the sink refused them",
+                     writer         ? ""
+                      : cfg->journal ? "<4>"
+                                     : "",
+                      ts, ts[0] ? " " : "", _level_to_string(EML_LEVEL_WARN), (unsigned long long)_get_thread_id(), n);
     if(k < 0) k = 0;
     size_t len = (size_t)k < sizeof note - 1 ? (size_t)k : sizeof note - 2;
     int    ok;
