@@ -4,8 +4,8 @@ EMLog — Minimal thread-safe logging
 [![Quality](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml?query=branch%3Amaster)
 [![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml?query=branch%3Amaster)
 [![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml?query=branch%3Amaster)
-[![License: MIT](https://img.shields.io/badge/license-MIT-informational)](./LICENSE)
 ![Coverage](.github/badges/coverage.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-informational)](./LICENSE)
 
 **📦 [Download the latest release](https://github.com/RomanHorshkov/EMlog/releases/latest)** — `.deb` packages, tarball, `SHA256SUMS`.
 
