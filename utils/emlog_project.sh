@@ -19,18 +19,16 @@ KYR_SUITE_PRIVATE_LDLIBS=(-lcmocka -pthread)
 KYR_SUITE_PUBLIC_SOURCES=('tests/UTs/publicAPI/*.c')
 KYR_SUITE_PUBLIC_CPPFLAGS=(-D_GNU_SOURCE -I"${ROOT_DIR}/tests/UTs/publicAPI")
 KYR_SUITE_PUBLIC_LDLIBS=(-lcmocka -pthread)
-# The unit coverage run's floor (the plan's B7): 95.7 % lines, 82.9 % branches measured on 2026-10-30, rounded down.
-KYR_UT_FAIL_UNDER_LINE=95
-KYR_UT_FAIL_UNDER_BRANCH=82
-# The multithreaded integration test: release, then coverage.
+# The multithreaded integration test: the release cell, and its counters in the one coverage run below.
 KYR_IT_SUITES=(it)
 KYR_SUITE_IT_SOURCES=(tests/ITs/integration_test.c)
 KYR_SUITE_IT_CPPFLAGS=(-D_GNU_SOURCE)
 KYR_SUITE_IT_LDLIBS=(-pthread)
-KYR_IT_COVERAGE=1
-# Its coverage run's floor (the plan's B7): 36.5 % lines, 17.1 % branches measured on 2026-10-30, rounded down.
-KYR_IT_FAIL_UNDER_LINE=36
-KYR_IT_FAIL_UNDER_BRANCH=17
+# Coverage across the unit suites AND the integration suite on one instrumented object (as SPSCring and MPSCring): the threaded flow
+# counts toward the one gate. Its floor: 97.1 % lines, 83.6 % branches measured on 2026-10-31, rounded down.
+KYR_COVERAGE_SUITES=(private public it)
+KYR_UT_FAIL_UNDER_LINE=97
+KYR_UT_FAIL_UNDER_BRANCH=83
 # Stress: the single-threaded and the 8-thread benchmark, every profile, static and shared.
 KYR_STRESS_SUITES=(stress)
 KYR_SUITE_STRESS_SOURCES=(tests/stress/stress.c tests/stress/stress_mt.c)
