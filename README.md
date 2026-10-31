@@ -4,8 +4,8 @@ EMLog — Minimal thread-safe logging
 [![Quality](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/quality.yml?query=branch%3Amaster)
 [![Security](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/security.yml?query=branch%3Amaster)
 [![Release](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml/badge.svg?branch=master)](https://github.com/RomanHorshkov/EMlog/actions/workflows/release.yml?query=branch%3Amaster)
-[![License: MIT](https://img.shields.io/badge/license-MIT-informational)](./LICENSE)
 ![Coverage](.github/badges/coverage.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-informational)](./LICENSE)
 
 **📦 [Download the latest release](https://github.com/RomanHorshkov/EMlog/releases/latest)** — `.deb` packages, tarball, `SHA256SUMS`.
 
@@ -46,9 +46,9 @@ Build and test
 ```sh
 ./utils/deps.sh sysroot && eval "$(./utils/deps.sh env)" && ./utils/run_pipeline.sh   # every gate
 ./utils/build_libs.sh release          # build/<profile>/libemlog.{a,so.<VERSION>} (no argument: every profile)
-./utils/build_UTs.sh                   # private (white-box) + public suites, coverage: tests/results/UTs
+./utils/build_UTs.sh                   # private (white-box) + public suites + the integration test on one instrumented object, coverage: tests/results/UTs
 ./utils/build_UTs_release.sh           # the suites against the release archive the deb ships
-./utils/build_ITs.sh                   # the multithreaded integration test (release), then coverage: tests/results/ITs/coverage
+./utils/build_ITs.sh                   # the multithreaded integration test against the release archive
 ./utils/build_sanitizer_tests.sh       # suites + IT under ASan, UBSan, LSan
 GCC_BUILD_ENABLE_TSAN=1 ./utils/build_tsan_tests.sh
 ./utils/build_stress.sh && ./utils/run_stress.sh   # every profile x static/shared: tests/results/stress/stress_summary.tsv
