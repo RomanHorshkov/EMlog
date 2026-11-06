@@ -2,8 +2,8 @@
  * @file emlog.h
  * @brief Tiny, thread-safe logging API: one call per line, errno-transparent, injection-safe, journald-aware.
  *
- * This header exposes a compact logging API with printf-like formatting, optional ISO8601 timestamps, and a mapping layer from POSIX errno
- * values to a small set of canonical error categories. The implementation is thread-safe and allows installing a custom writer callback.
+ * This header exposes a compact logging API with printf-like formatting, optional ISO8601 timestamps, and emlog_log_errno(), which appends
+ * an errno's strerror() text to a line. The implementation is thread-safe and allows installing a custom writer callback.
  *
  * The API aims to be minimal and stable to allow building a small static library that other projects can embed. All public symbols are
  * declared here and documented with Doxygen for easy generation of reference docs.

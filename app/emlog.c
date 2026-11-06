@@ -1,9 +1,9 @@
 /**
  * @file emlog.c
- * @brief Thread-safe logger implementation with configurable writers, timestamps, and errno categorization.
+ * @brief Thread-safe logger implementation with configurable writers, timestamps, and an errno's text appended to a line.
  *
  * This file owns the global logger state, timestamp formatting cache, default stdout/stderr writer path, custom writer dispatch, and POSIX
- * errno mapping helpers exposed by emlog.h.
+ * errno text helper (emlog_log_errno) exposed by emlog.h.
  */
 
 #ifndef _GNU_SOURCE
