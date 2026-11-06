@@ -2,6 +2,12 @@
 
 This project is set up so a Git tag is the release trigger.
 
+Today the release line is `together` (master waits for the owner): a release
+is built twice to one hash in kyr-build's noble build root, tagged
+`v<VERSION>`, and pinned by sha256 in its consumers' `deps.txt`; no GitHub
+release is published for the current version (1.5.1). The tag-driven flow
+below is the CI path that publishes one.
+
 ## Release flow
 
 1. Make sure the branch you want to release is green locally.
