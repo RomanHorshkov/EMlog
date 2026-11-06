@@ -12,7 +12,7 @@ EMLog — Minimal thread-safe logging
 Overview
 --------
 
-EMLog is a compact, thread-safe logging library written in C. It provides a tiny, easy-to-embed logging API with a small footprint, a fixed set of canonical error categories mapped from `errno`, and predictable behaviour under heavy concurrency.
+EMLog is a compact, thread-safe logging library written in C. It provides a tiny, easy-to-embed logging API with a small footprint, `emlog_log_errno` (`EML_PERR`) to append an errno's `strerror` text to a line, and predictable behaviour under heavy concurrency. The canonical errno categories of the releases before 1.4.0 are gone: callers use errno.
 
 Why EMLog?
 ----------
@@ -32,7 +32,8 @@ Project layout
 --------------
 
 - `app/emlog.h` — public API, fully documented with Doxygen comments.
-- `app/emlog.c` — implementation (writer dispatch, timestamp cache, `errno` categorization).
+- `app/emlog.c` — implementation (writer dispatch, timestamp cache, the lock-free line buffer, journald mode).
+- `app/levels.def` — the levels, one table: tag, journald priority, name, alias.
 - `tests/UTs/privateAPI/`, `tests/UTs/publicAPI/` — cmocka-based unit tests (white-box + black-box).
 - `tests/ITs/integration_test.c` — multithreaded integration/stress harness; `tests/stress/` the benchmarks; `tests/package/smoke.c` the installed-package test.
 - `utils/` — kyr-build's wrappers and `emlog_project.sh` (the declarations).
@@ -56,14 +57,17 @@ GCC_BUILD_ENABLE_TSAN=1 ./utils/build_tsan_tests.sh
 ./utils/smoke_test_package.sh          # tests/package/smoke.c against the installed debs only
 ```
 
-`libemlog`: `/usr/local/lib/libemlog.so.<version>` + soname link, `ldconfig` hooks. `libemlog-dev`: `/usr/local/include/emlog.h`, `libemlog.a` (`-fPIC`, links into shared objects and PIE executables alike), the linker link; Depends `libemlog (= <version>)`. Both Conflicts/Replaces the former `emlog`. The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The coverage badge is the unit coverage number, written by kyr-build's `coverage_badge.py`.
+`libemlog`: `/usr/local/lib/libemlog.so.<version>` + soname link, `ldconfig` hooks. `libemlog-dev`: `/usr/local/include/emlog.h`, `libemlog.a` (`-fPIC`, links into shared objects and PIE executables alike), the linker link; Depends `libemlog (= <version>)`. Both Conflicts/Replaces the former `emlog`. The pipeline's `package-smoke` stage runs the smoke test against the debs extracted into `build/smoke`; CI runs it after installing them. The coverage badge is the gated coverage run's number (the unit suites and the integration test on one instrumented object, held to 97 % of lines and 83 % of branches), written by kyr-build's `coverage_badge.py` in a pipeline post stage; ThreadSanitizer runs over the integration test and the multi-thread stress in every pipeline (`GCC_BUILD_ENABLE_TSAN=1` in the project file).
 
 Release process
 ----------------
 
 Releases are tag-driven. See [RELEASING.md](./RELEASING.md) for the exact
 merge, tag, and publish flow. Each GitHub Release attaches both debs, a
-header+libs tarball, and `SHA256SUMS`.
+header+libs tarball, and `SHA256SUMS`. No GitHub release is published for
+the current version (1.5.1): its debs are built twice to one hash in
+kyr-build's noble build root, tagged `v1.5.1`, and pinned by sha256 in the
+consumers' `deps.txt`.
 
 CI (`quality.yml`, cicd `c-quality`) runs the same wrappers, plus compiler portability (gcc + clang, `-Werror`), ThreadSanitizer and the package install + smoke test; `security.yml` runs GCC's `-fanalyzer`.
 
@@ -75,7 +79,7 @@ Usage
 
 int main(void) {
     emlog_init(-1, true); /* safe to call multiple times; last call wins */
-    emlog_set_level(EML_LEVEL_DEBUG);
+    emlog_set_level(EML_LEVEL_DBG);
 
     EML_INFO("main", "hello world %d", 1);
 
@@ -119,12 +123,12 @@ Builds go through `utils/build_libs.sh [profile ...]`, driven by the profile cat
 
 | Profile | Optimization | Warnings | Instrumentation | Hardened | Use it for |
 |---|---|---|---|---|---|
-| debug | `-Og -g3` | core | — | no | day-to-day development |
-| audit | `-O1 -g3` | everything + `-fanalyzer` | — | yes | compiler-driven validation |
-| sanitize | `-O1 -g3` | strict | ASan+UBSan+LSan | yes minus FORTIFY — conflicts with ASan | runtime bug hunting |
-| release | `-O2 -DNDEBUG` | strict | — | yes — full set below | production / the deb payload |
-| native | `-O3 -flto -march=native` | strict | — | yes | benchmarks on the deploy box |
-| extreme | `-O3 -flto -march=native` | core | — | deliberately none | max-perf experiments only |
+| debug | `-Og -g3` | the whole set, `-Werror` | — | no | day-to-day development |
+| audit | `-O1 -g3` | the whole set, `-Werror`, + `-fanalyzer` | — | yes | compiler-driven validation |
+| sanitize | `-O1 -g3` | the whole set, `-Werror` | ASan+UBSan+LSan | yes minus FORTIFY — conflicts with ASan | runtime bug hunting |
+| release | `-O2 -DNDEBUG` | the whole set, `-Werror` | — | yes — full set below | production / the deb payload |
+| native | `-O3 -flto=auto -march=native` | the whole set, `-Werror` | — | yes | benchmarks on the deploy box |
+| extreme | `-O3 -flto=auto -march=native` | the whole set, `-Werror` | — | deliberately none | max-perf experiments only |
 
 </details>
 
@@ -153,4 +157,4 @@ Build from a clean clone: `./utils/deps.sh sysroot && eval "$(./utils/deps.sh en
 
 ABI: `abi/layout.txt` is the committed public ABI of `app/emlog.h` (layouts, enumerator values, callbacks, function signatures, numeric constants), checked by kyr-build's gate through `utils/check_abi.sh` (pipeline stages `abi` and `abi-exports`): a changed line needs a raised major, a new public name a raised minor, and `libemlog.so` exports exactly the declared functions as `<name>@@EMLOG_<major>` (`utils/emlog.map`); `utils/emlog_project.sh` says what is public. Debs through kyr-build's `lib/deb.sh` (`X-Kyr-Tier`, byte-reproducible). Diagram: `docs/diagrams/abi_exports.puml`.
 
-Legacy names: `utils/check_legacy_names.sh` (kyr-build 3.0.0's check and patterns, copied until it is pinned) refuses a pre-kyr name in the tracked text; `legacy_names.allow` fences history only.
+Legacy names: the pipeline's legacy-names stage (the pinned kyr-build 3.1.1's `check_legacy_names.sh` and patterns) refuses a pre-kyr name in the tracked text; `legacy_names.allow` fences history only.
