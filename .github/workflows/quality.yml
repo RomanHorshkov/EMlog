@@ -23,12 +23,11 @@ concurrency:
 
 jobs:
   quality:
-    uses: RomanHorshkov/cicd/.github/workflows/c-quality.yml@v2
+    uses: RomanHorshkov/cicd/.github/workflows/c-quality.yml@v2.3.0
     with:
       kind: lib
       lib-name: emlog
       apt-packages: "pkg-config libcmocka-dev gcovr jq"
-      tsan-runs-on: ubuntu-22.04
       stress-timeout-minutes: 60
     secrets:
       SIBLING_REPOS_PAT: ${{ secrets.SIBLING_REPOS_PAT }}
