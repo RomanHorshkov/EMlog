@@ -1,6 +1,6 @@
 name: Security
 
-# GCC's static analyzer (-fanalyzer), on push/PR plus a weekly scheduled run so drift in
+# GCC's static analyzer (-fanalyzer), on every release tag plus a weekly scheduled run so drift in
 # dependencies/toolchains still gets caught even without a code change.
 #
 # No CodeQL here: SARIF upload requires code-scanning to be entitled for the repo (GitHub
@@ -9,11 +9,10 @@ name: Security
 # MPSCring's security.yml) if/when the repo goes public or GHAS gets enabled.
 
 on:
+  # Weekly and on every release tag, never on a push (the owner, 2026-11-11: GitHub minutes).
   push:
-    branches: [master, safety_upgrades]
     tags:
-      - "**"
-  pull_request:
+      - "v*.*.*"
   schedule:
     - cron: "0 6 * * 1" # every Monday 06:00 UTC
   workflow_dispatch:
